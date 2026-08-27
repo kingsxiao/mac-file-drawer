@@ -8,13 +8,24 @@ import UniformTypeIdentifiers
 struct FileIconStyle: Equatable {
     let symbolName: String
     let color: Color
+    /// 原始色值（对比度计算与深色提亮用）
+    let colorHex: UInt32
     /// 角标文字（多为扩展名缩写，区分同族语言/格式）；nil 不显示
     let badge: String?
 
     init(symbolName: String, hex: UInt32, badge: String? = nil) {
         self.symbolName = symbolName
         self.color = Color(hex: hex)
+        self.colorHex = hex
         self.badge = badge
+    }
+
+    /// 瓷片符号色：在对应明暗模式的瓷片底色（类型色 20% 叠材质近似）上
+    /// 保证 WCAG ≥3:1，不足时向白提亮（封顶 45%，保住色相）
+    func symbolColor(dark: Bool) -> Color {
+        let base = TypeColorContrast.tileBase(colorHex: colorHex, dark: dark)
+        let ensured = TypeColorContrast.ensureContrast(symbol: colorHex, on: base)
+        return Color(hex: ensured.color)
     }
 }
 

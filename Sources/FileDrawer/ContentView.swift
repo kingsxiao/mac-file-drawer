@@ -1700,6 +1700,11 @@ struct FileTile: View {
     let store: ShelfStore
     var size: CGFloat
     @ObservedObject private var settings = AppSettings.shared
+    @Environment(\.colorScheme) private var colorScheme
+    /// 符号/角标用对比度保障色（深色模式自动提亮）
+    private var effectiveSymbolColor: Color {
+        item.kind.style.symbolColor(dark: colorScheme == .dark)
+    }
 
     var body: some View {
         let radius = size * 0.27
@@ -1775,16 +1780,16 @@ struct FileTile: View {
                 Image(systemName: style.symbolName)
                     .font(.system(size: iconSize, weight: .medium))
                     .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(style.color)
+                    .foregroundStyle(effectiveSymbolColor)
 
                 if let badge {
                     Text(badge)
                         .font(.system(size: max(6, size * 0.17), weight: .semibold, design: .monospaced))
-                        .foregroundStyle(style.color)
+                        .foregroundStyle(effectiveSymbolColor)
                         .padding(.horizontal, size * 0.055)
                         .padding(.vertical, size * 0.018)
                         .background(Capsule().fill(style.color.opacity(0.13)))
-                        .overlay(Capsule().strokeBorder(style.color.opacity(0.25), lineWidth: 0.5))
+                        .overlay(Capsule().strokeBorder(effectiveSymbolColor.opacity(0.25), lineWidth: 0.5))
                 }
             }
         }
