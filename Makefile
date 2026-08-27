@@ -22,6 +22,9 @@ dmg:             ## 生成分发用 DMG（UNIVERSAL=1 出通用版）
 test:            ## 运行单元测试
 	@DEV="$${DEVELOPER_DIR:-}"; [[ -d "$$DEV" ]] || DEV=/Applications/Xcode.app/Contents/Developer; [[ -d "$$DEV" ]] || DEV="$$(xcode-select -p)"; DEVELOPER_DIR="$$DEV" swift test
 
+smoke-automation: ## 自动化接口端到端冒烟（需已构建 .app；本机有数据时自动备份-恢复）
+	zsh ./scripts/smoke_automation.sh --isolated
+
 clean:           ## 清理构建产物
 	swift package clean
 	rm -rf build

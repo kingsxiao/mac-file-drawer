@@ -168,6 +168,10 @@ URL 形式不返回数据——需要读取条目内容时用下面的「读取�
 Siri 短语示例：「放入 FileDrawer 抽屉」「读取 FileDrawer 抽屉条目」「清空 FileDrawer 的抽屉分组」。
 「读取 → 处理 → 移除已处理」的自动化闭环由此打通。
 
+**端到端冒烟**：`make smoke-automation` 逐条投递全部 URL 动作并断言 v3 持久化容器里的条目/分组状态
+（add/pin/send-to-front/move/rename/remove/clear/展开收起）。安全机制：FileDrawer 运行中拒绝执行、
+defaults 域已有数据时自动备份-恢复（`--isolated`）、结束自清理。
+
 ## 使用方法
 
 | 操作 | 方式 |
