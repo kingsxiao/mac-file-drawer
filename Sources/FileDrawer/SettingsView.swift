@@ -380,6 +380,8 @@ private struct HotKeyRecorderControl: View {
         .overlay(
             RecorderEventLayer(recording: $recording, onCatch: onCatch)
         )
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(recording ? L10n.t("请按下组合键…") : L10n.t("点按录制"))
     }
 }
 

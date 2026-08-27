@@ -283,3 +283,6 @@
 
 /* 批次39：诊断 */
 "导出诊断信息…" = "Export Diagnostics…";
+
+/* 批次43 */
+"打开收件箱文件夹" = "Open Inbox Folder";

@@ -168,11 +168,21 @@ final class KeyboardRouter {
                 return nil
             }
 
-        case 51: // Delete：移除选中条目（多选时批量移除，可整批还原）
+        case 51: // Delete：移除选中条目（多选整批）；预览打开时移除当前条目并自动轮播到下一条
             let targets = model.selectedItems(in: displayed)
             if !targets.isEmpty {
+                // 预览态单条删除：锚定被删条目的下一位，预览无缝继续
+                var carouselNext: ShelfItem?
+                if model.isPreviewVisible, targets.count == 1,
+                   let index = displayed.firstIndex(where: { $0.id == targets[0].id }),
+                   displayed.indices.contains(index + 1) {
+                    carouselNext = displayed[index + 1]
+                }
                 withAnimation(.spring(response: 0.32, dampingFraction: 0.8)) {
                     store.remove(targets)
+                    if let carouselNext {
+                        model.select(carouselNext)
+                    }
                 }
                 return nil
             }
@@ -462,6 +472,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
+        menu.addItem(withTitle: L10n.t("打开收件箱文件夹"), action: #selector(openInboxAction), keyEquivalent: "")
         menu.addItem(withTitle: L10n.t("导出诊断信息…"), action: #selector(exportDiagnosticsAction), keyEquivalent: "")
         menu.addItem(.separator())
         menu.addItem(withTitle: L10n.t("设置…"), action: #selector(settingsAction), keyEquivalent: ",")
@@ -512,6 +523,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func handleToggleDrawer() {
         toggleDrawer()
+    }
+
+    /// 在访达中打开收件箱（拖入文本/链接物化文件的所在目录）
+    @objc private func openInboxAction() {
+        NSWorkspace.shared.open(InboxStore.directory)
+        DiagnosticsLog.shared.log("app", "inbox revealed")
     }
 
     /// 导出诊断信息（环境摘要 + 最近日志条目）到文本文件
