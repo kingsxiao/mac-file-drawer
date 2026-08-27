@@ -118,16 +118,26 @@
 安装 .app 后注册 `filedrawer://`，终端、脚本、快捷指令（Shortcuts）都能驱动抽屉：
 
 ```bash
-open "filedrawer://add?path=/tmp/报告.pdf"                 # 放入抽屉（自动展开）
-open "filedrawer://add?path=/tmp/a.pdf&path=/tmp/b.txt"    # 一次放多个
-open "filedrawer://reveal?path=/tmp/报告.pdf"              # 在访达中定位
-open "filedrawer://toggle"                                 # 展开 ↔ 收起
-open "filedrawer://expand"                                 # 展开
-open "filedrawer://collapse"                               # 收起
+open "filedrawer://add?path=/tmp/报告.pdf"                          # 放入抽屉（自动展开）
+open "filedrawer://add?path=/tmp/a.pdf&group=工作"                  # 放入指定分组（不存在则创建）
+open "filedrawer://add?path=/tmp/a.pdf&path=/tmp/b.txt"             # 一次放多个
+open "filedrawer://reveal?path=/tmp/报告.pdf"                       # 在访达中定位
+open "filedrawer://toggle"                                          # 展开 ↔ 收起
+open "filedrawer://expand"                                          # 展开
+open "filedrawer://collapse"                                        # 收起
 ```
 
 路径含中文 / 空格时 `open` 会自动做百分号编码，无需手工处理；
 不存在的路径与重复条目会在抽屉里给轻提示。
+
+**快捷指令（Shortcuts）深度集成**：安装 .app 后，「快捷指令」App 里直接可用三个动作
+（也支持 Siri 短语「放入 FileDrawer 抽屉」等）——
+
+- **放入抽屉**：接收前序动作输出的文件，放进指定分组（不存在则创建），返回实际新增数；
+- **读取抽屉**：把抽屉 / 指定分组的文件（最新在前、可选上限）作为输出交给后续动作；
+- **展开抽屉**：展开 / 收起 / 两态切换。
+
+URL Scheme 与快捷指令走同一条命令路径（`DrawerCommands`），行为永远一致。
 
 ## 构建、安装与分发
 

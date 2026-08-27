@@ -11,7 +11,7 @@ import Foundation
 
 enum URLRouter {
     enum Action: Equatable {
-        case add(paths: [String])
+        case add(paths: [String], group: String?)
         case reveal(path: String)
         case toggle
         case expand
@@ -25,6 +25,11 @@ enum URLRouter {
 
         let host = (components.host ?? "").lowercased()
         let queryItems = components.queryItems ?? []
+        let rawGroup = queryItems
+            .first(where: { $0.name == "group" })?
+            .value?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let group = (rawGroup?.isEmpty == false) ? rawGroup : nil
 
         switch host {
         case "add":
@@ -32,7 +37,7 @@ enum URLRouter {
                 .filter { $0.name == "path" }
                 .compactMap { $0.value }
                 .filter { !$0.isEmpty }
-            return paths.isEmpty ? nil : .add(paths: paths)
+            return paths.isEmpty ? nil : .add(paths: paths, group: group)
 
         case "reveal":
             guard let path = queryItems.first(where: { $0.name == "path" })?.value,

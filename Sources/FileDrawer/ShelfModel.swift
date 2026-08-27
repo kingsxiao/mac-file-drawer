@@ -501,6 +501,18 @@ final class ShelfStore: ObservableObject {
         return group.id
     }
 
+    /// 取（必要时创建）同名分组并切换过去；名字不合法时保持当前分组。
+    /// 供 URL Scheme / 快捷指令「放入指定分组」使用。
+    @discardableResult
+    func ensureDrawer(named rawName: String) -> UUID {
+        let name = String(rawName.trimmingCharacters(in: .whitespacesAndNewlines).prefix(24))
+        if !name.isEmpty, let existing = drawers.first(where: { $0.name == name }) {
+            currentDrawerID = existing.id
+            return existing.id
+        }
+        return createDrawer(named: name) ?? currentDrawerID
+    }
+
     /// 重命名分组；空名 / 与其他分组重名忽略
     func renameDrawer(id: UUID, to rawName: String) {
         let name = String(rawName.trimmingCharacters(in: .whitespacesAndNewlines).prefix(24))

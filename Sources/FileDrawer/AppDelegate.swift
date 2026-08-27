@@ -603,43 +603,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// URL Scheme 动作统一走 DrawerCommands（与快捷指令 / App Intents 同一条路径）
     private func perform(_ action: URLRouter.Action) {
-        let store = ShelfStore.shared
         switch action {
-        case .add(let paths):
+        case .add(let paths, let group):
             expandDrawer()
-            let valid = paths.filter { FileManager.default.fileExists(atPath: $0) }
-            let invalidCount = paths.count - valid.count
-            guard !valid.isEmpty else {
-                store.postNotice(invalidCount > 0 ? "路径不存在，未放入抽屉" : "未放入任何文件")
-                return
-            }
-            withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) {
-                let result = store.add(urls: valid.map { URL(fileURLWithPath: $0) })
-                var notes: [String] = []
-                if result.skippedDuplicates > 0 {
-                    notes.append("已跳过 \(result.skippedDuplicates) 个重复条目")
-                }
-                if invalidCount > 0 {
-                    notes.append("\(invalidCount) 个路径不存在")
-                }
-                if !notes.isEmpty {
-                    store.postNotice(notes.joined(separator: "，"))
-                }
+            let result = DrawerCommands.add(paths: paths, group: group)
+            if result.added == 0, result.invalid == paths.count, !paths.isEmpty {
+                ShelfStore.shared.postNotice("路径不存在，未放入抽屉")
             }
 
         case .reveal(let path):
             expandDrawer()
-            NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
+            DrawerCommands.reveal(path: path)
 
         case .toggle:
-            toggleCollapseOrExpand()
+            DrawerCommands.setExpansion(expand: nil)
 
         case .expand:
-            expandDrawer()
+            DrawerCommands.setExpansion(expand: true)
 
         case .collapse:
-            if !InteractionModel.shared.isCollapsed { collapseDrawer() }
+            DrawerCommands.setExpansion(expand: false)
         }
     }
 
