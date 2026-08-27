@@ -291,6 +291,9 @@ make_app.sh / install.sh / uninstall.sh / make_dmg.sh / Makefile
   逐帧移动 frame（欠阻尼，带轻微过冲回弹），收起/展开都有真实的"抽屉手感"。
 - **多屏**：停靠屏幕由 `DrawerLayout.targetScreen(followMouse:)` 统一解析——
   可选「展开时停靠到鼠标所在屏幕」（在哪块屏唤出就贴哪块屏），显示器热插拔即时重贴边。
+  *设计取舍：不做「每屏独立记忆收起/展开态」——抽屉是单窗口，无法同时在两屏呈现
+  各自状态；「记住上次在哪块屏」与跟随鼠标模式重合，而「每屏各自的展开态」在
+  切屏时语义断裂（用户预期状态连续）。拔屏后抽屉消失的问题由热插拔重贴边解决。*
 - **单文件拖出**：`onDrag { item.dragProvider() }`。provider 同时注册
   *文件表示*（接收端拿到真实文件副本）与 *file-url 数据表示*（通用地址语义）。
 - **多选拖出**：多选时瓷片上叠一层 `MultiDragSourceView`（`NSDraggingSession`
