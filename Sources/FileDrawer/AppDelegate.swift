@@ -323,11 +323,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func expandDrawer() {
+        // 冷启动早期（URL Scheme / 快捷指令先于面板构建到达）不操作窗口，只改状态
+        guard panel != nil else {
+            InteractionModel.shared.isCollapsed = false
+            return
+        }
         InteractionModel.shared.isCollapsed = false // 触发边框动画（若处于收起态）
         slideInExpanded()
     }
 
     func collapseDrawer() {
+        guard panel != nil else {
+            InteractionModel.shared.isCollapsed = true
+            return
+        }
         let model = InteractionModel.shared
         model.closePreview()
         withAnimation(.easeOut(duration: 0.15)) { model.selectedID = nil }
