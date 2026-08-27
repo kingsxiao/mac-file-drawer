@@ -104,8 +104,13 @@ private struct GeneralSettingsTab: View {
                         Text(mode.label).tag(mode)
                     }
                 }
+                if interaction.sortMode == .manual {
+                    Text("手动顺序由条目右键菜单「调整顺序」或 ⌘↑ / ⌘↓ 维护。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
                 Toggle("单击直接打开", isOn: $settings.openOnSingleClick)
-                Text("开启后单击条目即打开文件；默认单击选中、双击打开。")
+                Text("开启后单击条目即打开文件；默认单击选中、双击打开（⌘/⇧点击可多选）。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -120,16 +125,19 @@ private struct GeneralSettingsTab: View {
                         Text(limit.label).tag(limit)
                     }
                 }
-                Text("超出上限时淘汰最早加入的条目。移除 / 清空的条目可通过提示条「还原」。")
+                Text("超出上限时淘汰最早加入的条目；置顶条目不受过期清理与容量淘汰影响。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 LabeledContent("当前条目") {
-                    Text("\(store.items.count) 个")
+                    Text("\(store.items.count) 个\(inventorySuffix)")
                         .foregroundStyle(.secondary)
                 }
-                Button("立即清理已不存在的条目") {
+                Button(store.missingIDs.isEmpty
+                       ? "立即清理已不存在的条目"
+                       : "立即清理已不存在的条目（\(store.missingIDs.count) 个）") {
                     store.removeMissing()
                 }
+                .disabled(store.missingIDs.isEmpty)
             }
         }
         .formStyle(.grouped)
@@ -138,6 +146,15 @@ private struct GeneralSettingsTab: View {
             launchAtLogin = LoginItemController.isEnabled
             loginItemError = nil
         }
+    }
+
+    /// 条目统计后缀：置顶 N · 失效 M（都为零时为空）
+    private var inventorySuffix: String {
+        var parts: [String] = []
+        let pinned = store.items.filter(\.pinned).count
+        if pinned > 0 { parts.append("置顶 \(pinned)") }
+        if !store.missingIDs.isEmpty { parts.append("失效 \(store.missingIDs.count)") }
+        return parts.isEmpty ? "" : "（\(parts.joined(separator: " · "))）"
     }
 
     private func setLaunchAtLogin(_ on: Bool) {
