@@ -41,7 +41,9 @@ final class KeyboardRouter {
         // 面板不是 key 窗口时不拦截；收起成边条时也放行
         guard let panel, panel.isKeyWindow, event.window === panel,
               !InteractionModel.shared.isCollapsed else { return event }
-        // 正在往搜索框里打字时完全放行（field editor 在响应链最前）
+        // 正在往搜索框里打字时完全放行（field editor 在响应链最前）：
+        // ←→ 光标移动、空格输入、Esc（部分输入法）等全部归文本编辑器——
+        // 包括 case 123/124 的预览切换分支也依赖此守卫不会被触达
         if panel.firstResponder is NSTextView { return event }
 
         // 键盘操作的作用域 = 当前分组的展示条目
