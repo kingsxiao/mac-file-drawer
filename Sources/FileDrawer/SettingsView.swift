@@ -107,6 +107,8 @@ private struct GeneralSettingsTab: View {
                 Text("未单独设置排序的分组（含新建分组）用它；每个分组可点头部排序菜单单独设置，互不影响。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                Toggle("搜索时也匹配文件内容（Spotlight）", isOn: $settings.searchFileContents)
+                    .help("名称没命中时，用 Spotlight 检索文件内容补充结果；被索引过的文档 / 文本才有效")
                 Toggle("单击直接打开", isOn: $settings.openOnSingleClick)
                 Text("开启后单击条目即打开文件；默认单击选中、双击打开（⌘/⇧点击可多选）。")
                     .font(.caption)

@@ -957,10 +957,13 @@ private struct ItemRow: View {
     /// 文件已不在磁盘上（后台扫描结果）
     private var isMissing: Bool { store.missingIDs.contains(item.id) }
 
-    /// 元信息行文案：失效条目前缀「文件已不存在」提示
+    /// 元信息行文案：失效 / 内容命中时加前缀标注
     private var displayMeta: String {
-        if !isMissing { return metaLine }
-        return metaLine.isEmpty ? "文件已不存在" : "文件已不存在 · \(metaLine)"
+        var parts: [String] = []
+        if isContentMatch { parts.append("内容匹配") }
+        if isMissing { parts.append("文件已不存在") }
+        if !metaLine.isEmpty { parts.append(metaLine) }
+        return parts.joined(separator: " · ")
     }
 
     /// 无障碍描述：名称 + （置顶 / 失效）+ 元信息
@@ -985,10 +988,17 @@ private struct ItemRow: View {
         }
     }
 
-    /// 元信息行：大小 · 时间；失效时红色提示
+    /// 名称未命中但内容命中（Spotlight）的条目：在名称旁加个小标注
+    private var isContentMatch: Bool {
+        guard interaction.contentMatchIDs.contains(item.id) else { return false }
+        let keywords = InteractionModel.parseQuery(interaction.searchText).keywords
+        return !keywords.isEmpty && !keywords.allSatisfy { item.name.localizedStandardContains($0) }
+    }
+
+    /// 元信息行：大小 · 时间；失效时红色提示；内容命中时标注来源
     @ViewBuilder
     private var metaRow: some View {
-        if isMissing || !metaLine.isEmpty {
+        if isMissing || !metaLine.isEmpty || isContentMatch {
             Text(displayMeta)
                 .font(.system(size: settings.compactRows ? 10.5 : 11))
                 .foregroundStyle(isMissing

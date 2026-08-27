@@ -43,7 +43,33 @@ final class InteractionModel: ObservableObject {
             let capped = String(searchText.prefix(60))
             if capped != searchText {
                 searchText = capped
+            } else if oldValue != searchText {
+                scheduleContentSearch()
             }
+        }
+    }
+    /// Spotlight 内容命中的条目（名称未命中但内容命中），并入搜索结果
+    @Published var contentMatchIDs: Set<UUID> = []
+    /// 内容搜索防抖任务
+    private var contentSearchTask: Task<Void, Never>?
+
+    /// 搜索词变化 → 清旧结果并防抖起一次 Spotlight 内容搜索
+    private func scheduleContentSearch() {
+        contentSearchTask?.cancel()
+        contentMatchIDs = []
+        let raw = searchText
+        guard SpotlightContentSearch.shouldSearch(raw, enabled: AppSettings.shared.searchFileContents) else { return }
+        contentSearchTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 350_000_000)
+            guard let self, !Task.isCancelled else { return }
+            let paths = await SpotlightContentSearch.shared.searchPaths(matching: raw)
+            guard !Task.isCancelled else { return }
+            // 与全部条目按路径求交（内容命中可跨分组，搜索作用于当前分组的展示管线）
+            let hits = ShelfStore.shared.items
+                .filter { paths.contains($0.path) }
+                .map(\.id)
+            guard !hits.isEmpty else { return }
+            self.contentMatchIDs = Set(hits)
         }
     }
     @Published var isSearchVisible = false
@@ -170,15 +196,20 @@ final class InteractionModel: ObservableObject {
         return query
     }
 
-    nonisolated static func filter(_ items: [ShelfItem], query: String) -> [ShelfItem] {
+    nonisolated static func filter(
+        _ items: [ShelfItem],
+        query: String,
+        contentMatched: Set<UUID> = []
+    ) -> [ShelfItem] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return items }
         let parsed = parseQuery(trimmed)
         guard !parsed.isEmpty else { return items }
         return items.filter { item in
             guard parsed.variants.isEmpty || parsed.variants.contains(item.kind.variant) else { return false }
+            // 名称命中：全部关键字都要落在名称里；内容命中作为回退（Spotlight 结果）
             for keyword in parsed.keywords where !item.name.localizedStandardContains(keyword) {
-                return false
+                return !parsed.keywords.isEmpty && contentMatched.contains(item.id)
             }
             return true
         }
@@ -203,9 +234,9 @@ final class InteractionModel: ObservableObject {
         }
     }
 
-    /// 展示管线：过滤 → 置顶分区 → 各分区按指定排序
+    /// 展示管线：过滤（名称 + Spotlight 内容回退）→ 置顶分区 → 各分区按指定排序
     func displayItems(from items: [ShelfItem], sort: SortMode) -> [ShelfItem] {
-        let filtered = Self.filter(items, query: searchText)
+        let filtered = Self.filter(items, query: searchText, contentMatched: contentMatchIDs)
         // 置顶条目永远浮在最前；置顶 / 普通两组内部各自按当前排序
         let pinned = Self.sorted(filtered.filter(\.pinned), by: sort)
         let rest = Self.sorted(filtered.filter { !$0.pinned }, by: sort)

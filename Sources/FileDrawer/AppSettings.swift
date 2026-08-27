@@ -242,6 +242,7 @@ final class AppSettings: ObservableObject {
         static let edge = prefix + "edge"
         static let showDockIcon = prefix + "showDockIcon"
         static let followMouseScreen = prefix + "followMouseScreen"
+        static let searchFileContents = prefix + "searchFileContents"
     }
 
     private let defaults: UserDefaults
@@ -320,6 +321,10 @@ final class AppSettings: ObservableObject {
     /// 多显示器：展开时停靠到鼠标所在屏幕（关闭则始终主屏幕）
     @Published var followMouseScreen: Bool {
         didSet { defaults.set(followMouseScreen, forKey: Keys.followMouseScreen) }
+    }
+    /// 搜索时也匹配文件内容（Spotlight kMDItemTextContent）
+    @Published var searchFileContents: Bool {
+        didSet { defaults.set(searchFileContents, forKey: Keys.searchFileContents) }
     }
 
     // MARK: 交互
@@ -416,6 +421,7 @@ final class AppSettings: ObservableObject {
         edge = DrawerEdge(rawValue: defaults.integer(forKey: Keys.edge)) ?? .right
         showDockIcon = defaults.object(forKey: Keys.showDockIcon) as? Bool ?? true
         followMouseScreen = defaults.bool(forKey: Keys.followMouseScreen)
+        searchFileContents = defaults.object(forKey: Keys.searchFileContents) as? Bool ?? true
         openOnSingleClick = defaults.bool(forKey: Keys.openOnSingleClick)
         collapseAfterDragOut = defaults.bool(forKey: Keys.collapseAfterDragOut)
         collapseWhenEmpty = defaults.bool(forKey: Keys.collapseWhenEmpty)
