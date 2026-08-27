@@ -168,7 +168,8 @@ URL 形式不返回数据——需要读取条目内容时用下面的「读取�
 Siri 短语示例：「放入 FileDrawer 抽屉」「读取 FileDrawer 抽屉条目」「清空 FileDrawer 的抽屉分组」。
 「读取 → 处理 → 移除已处理」的自动化闭环由此打通。
 
-**端到端验证**：URL 路径 `make smoke-automation` 逐条投递并断言 v3 容器状态（8/8）；
+**端到端验证**：URL 路径 `make smoke-automation` 逐条投递并断言 v3 容器状态（8/8；
+也可在 GitHub Actions → CI → Run workflow 手动触发 `automation-smoke` job 在干净 runner 上跑）；
 快捷指令路径有对等的拼装层集成测试（9 意图 × 参数→`run` 层→store 往返语义，
 `IntentsIntegrationTests`——`perform` 仅委托 `run`，行为一致）。
 （add/pin/send-to-front/move/rename/remove/clear/展开收起）。安全机制：FileDrawer 运行中拒绝执行、

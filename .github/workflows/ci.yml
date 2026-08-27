@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 jobs:
   test:
@@ -51,3 +52,23 @@ jobs:
         with:
           name: FileDrawer-universal.dmg
           path: build/*.dmg
+
+  # 自动化接口端到端冒烟：手动触发（Actions → CI → Run workflow）。
+  # 脚本自带保护：FileDrawer 运行中拒绝、defaults 域非空拒绝、结束自清理。
+  automation-smoke:
+    name: Automation URL Smoke (manual)
+    runs-on: macos-14
+    if: github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+
+      - name: Package .app
+        run: zsh ./make_app.sh
+
+      - name: Run automation smoke
+        run: |
+          chmod +x scripts/smoke_automation.sh
+          ./scripts/smoke_automation.sh
