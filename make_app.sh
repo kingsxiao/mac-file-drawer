@@ -8,7 +8,7 @@ cd "$(dirname "$0")"
 
 # 版本号唯一来源：发版只改这两行（关于面板、DMG 文件名都从产物里读）
 VERSION="1.5.0"
-BUILD="10"
+BUILD="11"
 
 # 工具链探测：已设置 DEVELOPER_DIR 则尊重；否则优先完整版 Xcode；都没有就用 xcode-select 当前选择（纯 CLT 也能编译本项目）
 if [[ -z "$DEVELOPER_DIR" && -d /Applications/Xcode.app/Contents/Developer ]]; then
@@ -50,6 +50,12 @@ if [[ -d "$RES_BUNDLE" ]]; then
   cp -R "$RES_BUNDLE" "$APP/Contents/Resources/"
 fi
 
+# 主包本地化表：App Intents 面板（LocalizedStringResource）从主包解析，
+# 把同一份表放进 .app 的 <lang>.lproj（UI 走 Bundle.module，互不冲突）
+mkdir -p "$APP/Contents/Resources/en.lproj" "$APP/Contents/Resources/zh-Hans.lproj"
+cp "Sources/FileDrawer/Resources/en.lproj/Localizable.strings" "$APP/Contents/Resources/en.lproj/"
+cp "Sources/FileDrawer/Resources/zh-Hans.lproj/Localizable.strings" "$APP/Contents/Resources/zh-Hans.lproj/"
+
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -75,6 +81,13 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <string>public.app-category.utilities</string>
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>zh-Hans</string>
+    <key>CFBundleLocalizations</key>
+    <array>
+        <string>zh-Hans</string>
+        <string>en</string>
+    </array>
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSPrincipalClass</key>

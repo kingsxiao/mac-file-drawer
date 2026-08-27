@@ -231,3 +231,20 @@
 /* 批次30 追加 */
 "键码 %d" = "Key code %d";
 "关闭" = "Close";
+
+/* App Intents 面板（主包 Localizable 解析） */
+"放入文件抽屉" = "Put in File Drawer";
+"把文件放进文件抽屉的指定分组（不指定则为当前分组），可配合快捷指令的前序输出使用。" = "Put files into a chosen group of File Drawer (current group if unset); pair with previous actions' output.";
+"文件" = "Files";
+"分组（可选，不存在则创建）" = "Group (optional, created if missing)";
+"读取抽屉条目" = "Read Drawer Items";
+"把抽屉（或指定分组）里的文件作为输出，交给快捷指令的后续动作处理。" = "Returns drawer (or group) files as output for later actions.";
+"分组（可选，默认当前分组）" = "Group (optional, defaults to current)";
+"最多返回" = "Max Results";
+"展开文件抽屉" = "Show File Drawer";
+"展开、收起或在两态间切换文件抽屉。" = "Expand, collapse, or toggle File Drawer.";
+"动作" = "Action";
+"抽屉动作" = "Drawer Action";
+"展开 ↔ 收起" = "Toggle";
+"展开" = "Expand";
+"收起" = "Collapse";
