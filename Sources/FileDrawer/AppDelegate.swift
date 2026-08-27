@@ -81,6 +81,19 @@ final class KeyboardRouter {
             return nil
         }
 
+        // Cmd+Return：预览打开时用默认应用打开当前条目并关闭预览
+        if flags == .command, event.keyCode == 36 || event.keyCode == 76 {
+            guard model.isPreviewVisible,
+                  let item = model.selectedItem(in: displayed) else { return event }
+            model.closePreview()
+            if !store.missingIDs.contains(item.id) {
+                NSWorkspace.shared.open(item.url)
+            } else {
+                NSSound.beep()
+            }
+            return nil
+        }
+
         // Cmd+↑ / Cmd+↓：手动排序下平移选中条目（自动切入「手动顺序」）
         if flags == .command, event.keyCode == 126 || event.keyCode == 125 {
             let targets = model.selectedItems(in: displayed)
