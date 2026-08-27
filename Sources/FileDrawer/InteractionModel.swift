@@ -5,6 +5,10 @@ import SwiftUI
 @MainActor
 final class InteractionModel: ObservableObject {
     static let shared = InteractionModel()
+    // 排序覆盖用独立 key 而非并入 ShelfPersistence v3 容器：
+    // 排序是 UI 偏好（InteractionModel 域）而非抽屉数据（ShelfStore 域），
+    // 并入会制造跨对象耦合与初始化顺序风险（见 README·实现要点·多抽屉分组条目）。
+    // 分组删除时由 ShelfStore.deleteDrawer 调 resetSortMode 清理，不留孤儿映射。
     private static let sortDefaultsKey = "com.wangxiao.filedrawer.sortMode"
     private static let perDrawerSortKey = "com.wangxiao.filedrawer.sortModes.v2"
 
