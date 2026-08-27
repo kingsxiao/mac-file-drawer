@@ -315,6 +315,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         _ = NSApplication.shared.windows // 触发初始化
         DiagnosticsLog.shared.log("app", "launch done collapsed=\(startCollapsed)")
+
+        // 收件箱 / 缓存目录可用性检查：macOS 升级或权限变更后 createDirectory 可能
+        // 静默失败（try? 吞错），导致文本物化与缩略图缓存全部无声丢失——启动时记一次
+        for (label, url) in [("inbox", InboxStore.directory), ("thumbcache", ThumbnailDiskCache.directory)] {
+            var isDir: ObjCBool = false
+            if !FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir) || !isDir.boolValue {
+                DiagnosticsLog.shared.log("store", "\(label) directory unavailable path=\(url.lastPathComponent)")
+            }
+        }
     }
 
     // MARK: - 展开 / 收起 / 隐藏
