@@ -667,22 +667,12 @@ private struct ItemRow: View {
 
     var body: some View {
         HStack(spacing: settings.compactRows ? 8 : 10) {
-            FileTile(item: item, store: store, size: tileSize)
-                .overlay(alignment: .topLeading) {
-                    if item.pinned {
-                        // 置顶角标：品牌色小图钉，压在瓷片左上角
-                        Image(systemName: "pin.fill")
-                            .font(.system(size: 7, weight: .bold))
-                            .foregroundStyle(.white)
-                            .padding(3)
-                            .background(Circle().fill(DrawerTheme.accentGradient))
-                            .overlay(Circle().strokeBorder(.white.opacity(0.45), lineWidth: 0.6))
-                            .offset(x: -3, y: -3)
-                            .help("已置顶 · 免于自动清理")
-                    }
-                }
-                .scaleEffect(hovered ? 1.07 : 1)
-                .animation(.spring(response: 0.28, dampingFraction: 0.6), value: hovered)
+            tileWithOverlays
+
+            VStack(alignment: .leading, spacing: settings.compactRows ? 1.5 : 2.5) {
+                nameRow
+                metaRow
+            }
 
             VStack(alignment: .leading, spacing: settings.compactRows ? 1.5 : 2.5) {
                 nameRow
@@ -840,6 +830,42 @@ private struct ItemRow: View {
 
     private var tileSize: CGFloat { settings.compactRows ? 30 : 38 }
 
+    /// 瓷片 + 置顶角标 + 多选拖拽把手层
+    private var tileWithOverlays: some View {
+        FileTile(item: item, store: store, size: tileSize)
+            .overlay(alignment: .topLeading) {
+                if item.pinned {
+                    // 置顶角标：品牌色小图钉，压在瓷片左上角
+                    Image(systemName: "pin.fill")
+                        .font(.system(size: 7, weight: .bold))
+                        .foregroundStyle(.white)
+                        .padding(3)
+                        .background(Circle().fill(DrawerTheme.accentGradient))
+                        .overlay(Circle().strokeBorder(.white.opacity(0.45), lineWidth: 0.6))
+                        .offset(x: -3, y: -3)
+                        .help("已置顶 · 免于自动清理")
+                }
+            }
+            // 多选时瓷片变成整批拖拽把手：拖它 = 拖出全部选中条目
+            .overlay {
+                MultiDragOverlay(
+                    active: !batchDragTargets.isEmpty,
+                    targets: batchDragTargets,
+                    onSessionBegan: {
+                        guard settings.collapseAfterDragOut else { return }
+                        DragSessionObserver.notifyDragEnd {
+                            guard settings.collapseAfterDragOut,
+                                  !InteractionModel.shared.isCollapsed else { return }
+                            NotificationCenter.default.post(name: .toggleDrawer, object: nil)
+                        }
+                    }
+                )
+            }
+            .help(batchDragTargets.isEmpty ? "" : "拖动瓷片可拖出整批（\(batchDragTargets.count) 个）")
+            .scaleEffect(hovered ? 1.07 : 1)
+            .animation(.spring(response: 0.28, dampingFraction: 0.6), value: hovered)
+    }
+
     private var metaLine: String { item.metaLine(settings: settings) }
 
     /// 文件已不在磁盘上（后台扫描结果）
@@ -894,6 +920,18 @@ private struct ItemRow: View {
             return
         }
         NSWorkspace.shared.open(item.url)
+    }
+
+    /// 多选批量拖出的目标集合：行在多选集合里才非空（此时瓷片是拖拽把手）
+    private var batchDragTargets: [ShelfItem] {
+        guard interaction.selectedIDs.contains(item.id),
+              interaction.selectedIDs.count > 1 else { return [] }
+        return interaction.selectedItems(
+            in: interaction.displayItems(
+                from: store.currentItems,
+                sort: interaction.sortMode(for: store.currentDrawerID)
+            )
+        )
     }
 
     /// 右键菜单操作目标：行在多选集合里 → 整个集合（访达语义）；范围限当前分组
