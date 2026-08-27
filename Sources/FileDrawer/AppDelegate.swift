@@ -649,6 +649,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             expandDrawer()
             DrawerCommands.reveal(path: path)
 
+        case .pin(let group, let limit):
+            _ = DrawerCommands.setPinned(group: group, limit: limit, pinned: true)
+
+        case .unpin(let group, let limit):
+            _ = DrawerCommands.setPinned(group: group, limit: limit, pinned: false)
+
+        case .sendToFront(let group, let limit):
+            let moved = DrawerCommands.sendToFront(group: group, limit: limit)
+            if moved > 0 { expandDrawer() }
+
         case .remove(let group, let limit):
             let removed = DrawerCommands.removeItems(group: group, limit: limit)
             if removed == 0 { ShelfStore.shared.postNotice(L10n.t("没有可移除的条目")) }

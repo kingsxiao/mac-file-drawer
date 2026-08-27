@@ -97,6 +97,32 @@ enum DrawerCommands {
         return before
     }
 
+    /// 置顶 / 取消置顶：分组可选（默认当前），limit>0 只作用于最新 N 条（0=全部）。返回受影响条数。
+    @discardableResult
+    static func setPinned(group: String? = nil, limit: Int = 0, pinned: Bool) -> Int {
+        let store = ShelfStore.shared
+        guard let drawerID = drawerID(named: group) else { return 0 }
+        let candidates = store.items(in: drawerID).sorted { $0.addedAt > $1.addedAt }
+        let targets = limit > 0 ? Array(candidates.prefix(limit)) : Array(candidates)
+        guard !targets.isEmpty else { return 0 }
+        store.setPinned(pinned, for: Set(targets.map(\.id)))
+        return targets.count
+    }
+
+    /// 移到最前：分组可选（默认当前），limit>0 只移动最新 N 条（0=全部）；
+    /// 自动把该分组切到「手动顺序」，重排在界面上立即可见。返回移动条数。
+    @discardableResult
+    static func sendToFront(group: String? = nil, limit: Int = 0) -> Int {
+        let store = ShelfStore.shared
+        guard let drawerID = drawerID(named: group) else { return 0 }
+        let candidates = store.items(in: drawerID).sorted { $0.addedAt > $1.addedAt }
+        let targets = limit > 0 ? Array(candidates.prefix(limit)) : Array(candidates)
+        guard !targets.isEmpty else { return 0 }
+        InteractionModel.shared.setSortMode(.manual, for: drawerID)
+        store.send(ids: targets.map(\.id), toFront: true)
+        return targets.count
+    }
+
     /// 展开 / 收起 / 切换
     static func setExpansion(expand: Bool?) {
         guard let delegate = NSApp.delegate as? AppDelegate else { return }

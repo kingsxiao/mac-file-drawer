@@ -15,6 +15,9 @@ enum URLRouter {
         case reveal(path: String)
         case remove(group: String?, limit: Int)
         case clear(group: String?)
+        case pin(group: String?, limit: Int)
+        case unpin(group: String?, limit: Int)
+        case sendToFront(group: String?, limit: Int)
         case toggle
         case expand
         case collapse
@@ -61,6 +64,22 @@ enum URLRouter {
 
         case "clear":
             return .clear(group: group)
+
+        case "pin", "unpin":
+            let limit = queryItems
+                .first(where: { $0.name == "limit" })?
+                .value
+                .flatMap { Int($0) } ?? 0
+            return host == "pin"
+                ? .pin(group: group, limit: max(0, limit))
+                : .unpin(group: group, limit: max(0, limit))
+
+        case "send-to-front":
+            let limit = queryItems
+                .first(where: { $0.name == "limit" })?
+                .value
+                .flatMap { Int($0) } ?? 0
+            return .sendToFront(group: group, limit: max(0, limit))
 
         case "collapse":
             return .collapse

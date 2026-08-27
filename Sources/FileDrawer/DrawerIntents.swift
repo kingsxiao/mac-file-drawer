@@ -123,6 +123,44 @@ struct ClearDrawerGroupIntent: AppIntent {
     }
 }
 
+
+// MARK: 置顶 / 置前
+
+struct PinDrawerItemsIntent: AppIntent {
+    static let title: LocalizedStringResource = "置顶抽屉条目"
+    static let description = IntentDescription("置顶（或取消置顶）分组（默认当前分组）的条目；数量为 0 表示全部。置顶条目浮到最前且免于自动清理。")
+
+    @Parameter(title: "分组（可选，默认当前分组）")
+    var group: String?
+
+    @Parameter(title: "数量（0=全部）", default: 0)
+    var limit: Int
+
+    @Parameter(title: "置顶", default: true)
+    var pin: Bool
+
+    @MainActor
+    func perform() async throws -> some IntentResult & ReturnsValue<Int> {
+        .result(value: DrawerCommands.setPinned(group: group, limit: limit, pinned: pin))
+    }
+}
+
+struct SendToFrontIntent: AppIntent {
+    static let title: LocalizedStringResource = "抽屉条目移到最前"
+    static let description = IntentDescription("把分组（默认当前分组）的最新若干条（0=全部）移到最前，并把该分组切到「手动顺序」。")
+
+    @Parameter(title: "分组（可选，默认当前分组）")
+    var group: String?
+
+    @Parameter(title: "数量（0=全部）", default: 0)
+    var limit: Int
+
+    @MainActor
+    func perform() async throws -> some IntentResult & ReturnsValue<Int> {
+        .result(value: DrawerCommands.sendToFront(group: group, limit: limit))
+    }
+}
+
 // MARK: App Shortcuts（快捷指令 App 里的入口短语）
 
 struct FileDrawerShortcuts: AppShortcutsProvider {
@@ -157,6 +195,18 @@ struct FileDrawerShortcuts: AppShortcutsProvider {
             phrases: ["清空\(.applicationName)的抽屉分组"],
             shortTitle: "清空抽屉分组",
             systemImageName: "trash.slash"
+        )
+        AppShortcut(
+            intent: PinDrawerItemsIntent(),
+            phrases: ["置顶\(.applicationName)抽屉条目"],
+            shortTitle: "置顶抽屉条目",
+            systemImageName: "pin"
+        )
+        AppShortcut(
+            intent: SendToFrontIntent(),
+            phrases: ["把\(.applicationName)抽屉条目移到最前"],
+            shortTitle: "条目移到最前",
+            systemImageName: "arrow.up.to.line"
         )
     }
 }

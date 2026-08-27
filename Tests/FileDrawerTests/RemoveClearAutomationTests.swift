@@ -113,4 +113,51 @@ final class RemoveClearAutomationTests: XCTestCase {
     private func resolved(_ item: ShelfItem, _ groupID: UUID) -> Bool {
         item.drawerID == groupID
     }
+
+    // MARK: - 置顶 / 置前（批次35）
+
+    func testURLPinAndSendToFrontParsing() {
+        XCTAssertEqual(action("filedrawer://pin"), .pin(group: nil, limit: 0))
+        XCTAssertEqual(action("filedrawer://pin?group=工作&limit=3"), .pin(group: "工作", limit: 3))
+        XCTAssertEqual(action("filedrawer://unpin?limit=2"), .unpin(group: nil, limit: 2))
+        XCTAssertEqual(action("filedrawer://pin?limit=-1"), .pin(group: nil, limit: 0))
+        XCTAssertEqual(action("filedrawer://send-to-front"), .sendToFront(group: nil, limit: 0))
+        XCTAssertEqual(
+            action("filedrawer://send-to-front?group=下载&limit=5"),
+            .sendToFront(group: "下载", limit: 5)
+        )
+    }
+
+    func testPinAndSendToFrontSemantics() throws {
+        let (store, groupID, dir) = try stageGroup(["甲.txt", "乙.txt", "丙.txt"])
+        try MainActor.assumeIsolated {
+            defer { try? FileManager.default.removeItem(at: dir) }
+            let groupName = store.drawers.first { $0.id == groupID }!.name
+
+            // 置顶最新 2 条（甲、乙）
+            XCTAssertEqual(DrawerCommands.setPinned(group: groupName, limit: 2, pinned: true), 2)
+            let groupItems = store.items(in: groupID)
+            XCTAssertTrue(groupItems.first { $0.name == "甲.txt" }!.pinned)
+            XCTAssertTrue(groupItems.first { $0.name == "乙.txt" }!.pinned)
+            XCTAssertFalse(groupItems.first { $0.name == "丙.txt" }!.pinned)
+
+            // 取消全部置顶
+            XCTAssertEqual(DrawerCommands.setPinned(group: groupName, pinned: false), 3)
+            XCTAssertTrue(store.items(in: groupID).allSatisfy { !$0.pinned })
+
+            // 置前最新 1 条（甲）→ items 数组前部 + 该分组切手动顺序
+            let moved = DrawerCommands.sendToFront(group: groupName, limit: 1)
+            XCTAssertEqual(moved, 1)
+            XCTAssertEqual(store.items.first?.name, "甲.txt", "整批移到 items 最前")
+            XCTAssertEqual(
+                InteractionModel.shared.sortMode(for: groupID),
+                .manual,
+                "置前应把该分组切到手动顺序（重排可见）"
+            )
+
+            // 空分组 / 未知分组
+            XCTAssertEqual(DrawerCommands.sendToFront(group: "不存在的分组名"), 0)
+            XCTAssertEqual(DrawerCommands.setPinned(group: "不存在的分组名", pinned: true), 0)
+        }
+    }
 }

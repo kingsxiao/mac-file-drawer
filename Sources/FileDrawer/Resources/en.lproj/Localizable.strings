@@ -257,3 +257,10 @@
 "数量（0=全部）" = "Count (0 = all)";
 "清空抽屉分组" = "Clear Drawer Group";
 "清空指定分组（默认当前分组）的全部条目，移除后可在抽屉里「还原」。" = "Clears all items in a group (current if unset). Undoable in the drawer.";
+
+/* 批次35：置顶/置前自动化 */
+"置顶抽屉条目" = "Pin Drawer Items";
+"置顶（或取消置顶）分组（默认当前分组）的条目；数量为 0 表示全部。置顶条目浮到最前且免于自动清理。" = "Pins (or unpins) items in a group (current if unset); 0 = all. Pinned items float to top and are exempt from auto-clean.";
+"置顶" = "Pin";
+"抽屉条目移到最前" = "Send Drawer Items to Front";
+"把分组（默认当前分组）的最新若干条（0=全部）移到最前，并把该分组切到「手动顺序」。" = "Moves the newest items (0 = all) of a group (current if unset) to the front and switches the group to manual order.";

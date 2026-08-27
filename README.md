@@ -129,6 +129,8 @@ open "filedrawer://expand"                                          # 展开
 open "filedrawer://collapse"                                        # 收起
 open "filedrawer://remove?group=工作&limit=3"                       # 移除分组最新 3 条（0=全部，可还原）
 open "filedrawer://clear?group=工作"                                # 清空分组（可还原）
+open "filedrawer://pin?group=工作&limit=3"                          # 置顶最新 3 条（unpin 取消）
+open "filedrawer://send-to-front?group=工作&limit=5"                # 最新 5 条移到最前（自动切手动顺序）
 ```
 
 路径含中文 / 空格时 `open` 会自动做百分号编码，无需手工处理；
