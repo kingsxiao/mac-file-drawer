@@ -236,6 +236,29 @@ final class ShelfStore: ObservableObject {
         }
     }
 
+    /// 导出全部条目到目标文件夹（拷贝；同名自动追加序号）。
+    /// 返回 (成功数, 失败数, 跳过数)：失效条目跳过。
+    @discardableResult
+    func exportAll(to folder: URL) -> (exported: Int, failed: Int, skipped: Int) {
+        var exported = 0
+        var failed = 0
+        var skipped = 0
+        for item in items {
+            guard FileManager.default.fileExists(atPath: item.path) else {
+                skipped += 1
+                continue
+            }
+            let destination = InboxStore.uniqueSiblingURL(fileName: item.name, directory: folder)
+            do {
+                try FileManager.default.copyItem(at: item.url, to: destination)
+                exported += 1
+            } catch {
+                failed += 1
+            }
+        }
+        return (exported, failed, skipped)
+    }
+
     // MARK: 置顶 / 手动排序
 
     /// 批量置顶/取消：只要有一个未置顶就统一置顶，否则统一取消（访达标签式语义）

@@ -376,16 +376,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         let menu = NSMenu()
         menu.delegate = self
+        statusItem.menu = menu
+        populateStatusMenu(menu)
+    }
+
+    /// 填充菜单栏菜单（每次打开时原地重建：切换项文案 + 最近条目列表保持最新）
+    private func populateStatusMenu(_ menu: NSMenu) {
+        menu.removeAllItems()
         menu.addItem(withTitle: "显示 / 隐藏抽屉", action: #selector(toggleAction), keyEquivalent: "")
         menu.addItem(.separator())
         menu.addItem(withTitle: "导入文件…", action: #selector(importAction), keyEquivalent: "")
+        menu.addItem(withTitle: "导出全部到文件夹…", action: #selector(exportAllAction), keyEquivalent: "")
         menu.addItem(withTitle: "清空抽屉", action: #selector(clearAction), keyEquivalent: "")
+
+        // 最近条目：按加入时间倒序取前 6 个，点击直接打开
+        let recents = Array(
+            ShelfStore.shared.items
+                .sorted { $0.addedAt > $1.addedAt }
+                .prefix(6)
+        )
+        if !recents.isEmpty {
+            menu.addItem(.separator())
+            let header = menu.addItem(withTitle: "最近条目", action: nil, keyEquivalent: "")
+            header.isEnabled = false
+            for item in recents {
+                let menuItem = menu.addItem(
+                    withTitle: item.name,
+                    action: #selector(openRecentAction(_:)),
+                    keyEquivalent: ""
+                )
+                menuItem.representedObject = item.path
+            }
+        }
+
         menu.addItem(.separator())
         menu.addItem(withTitle: "设置…", action: #selector(settingsAction), keyEquivalent: ",")
         menu.addItem(.separator())
         menu.addItem(withTitle: "关于文件抽屉", action: #selector(aboutAction), keyEquivalent: "")
         menu.addItem(withTitle: "退出文件抽屉", action: #selector(quitAction), keyEquivalent: "q")
-        statusItem.menu = menu
     }
 
     /// 最小主菜单：让 ⌘,（设置）、⌘H / ⌘Q 等标准快捷键生效
@@ -481,6 +509,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ShelfStore.shared.clear()
     }
 
+    /// 菜单栏「最近条目」点击：直接打开对应文件
+    @objc private func openRecentAction(_ sender: NSMenuItem) {
+        guard let path = sender.representedObject as? String else { return }
+        guard FileManager.default.fileExists(atPath: path) else {
+            NSSound.beep()
+            return
+        }
+        NSWorkspace.shared.open(URL(fileURLWithPath: path))
+    }
+
+    /// 导出全部条目到所选文件夹（拷贝，同名自动序号；失效条目跳过）
+    @objc private func exportAllAction() {
+        let store = ShelfStore.shared
+        guard !store.items.isEmpty else {
+            NSSound.beep()
+            return
+        }
+        expandDrawer()
+        let dlg = NSOpenPanel()
+        dlg.canChooseFiles = false
+        dlg.canChooseDirectories = true
+        dlg.canCreateDirectories = true
+        dlg.allowsMultipleSelection = false
+        dlg.prompt = "导出到这里"
+        dlg.message = "把抽屉里的 \(store.items.count) 个条目拷贝到所选文件夹"
+        guard dlg.runModal() == .OK, let folder = dlg.url else { return }
+
+        let result = store.exportAll(to: folder)
+        let alert = NSAlert()
+        alert.alertStyle = result.failed > 0 ? .warning : .informational
+        alert.messageText = "已导出 \(result.exported) 个条目"
+        var details = [String]()
+        if result.skipped > 0 { details.append("\(result.skipped) 个失效条目已跳过") }
+        if result.failed > 0 { details.append("\(result.failed) 个拷贝失败") }
+        alert.informativeText = details.joined(separator: "，")
+        alert.runModal()
+    }
+
     @objc private func quitAction() {
         NSApp.terminate(nil)
     }
@@ -498,7 +564,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 extension AppDelegate: NSMenuDelegate {
     func menuWillOpen(_ menu: NSMenu) {
-        let collapsed = InteractionModel.shared.isCollapsed
-        menu.items.first?.title = collapsed ? "展开抽屉" : (isOpen ? "收起成边条" : "展开抽屉")
+        // 原地重建：切换项文案 + 最近条目保持最新（同一个 NSMenu 实例，避免打断正在打开的菜单）
+        populateStatusMenu(menu)
     }
 }

@@ -812,6 +812,9 @@ private struct ItemRow: View {
             if openable.count < targets.count { NSSound.beep() }
             for target in openable { NSWorkspace.shared.open(target.url) }
         }
+        if !isMissing, targets.count == 1 {
+            openWithMenu
+        }
         Button("快速预览") { interaction.togglePreview(for: item) }
         Button("在访达中显示\(countSuffix(targets))") {
             NSWorkspace.shared.activateFileViewerSelecting(targets.map(\.url))
@@ -851,6 +854,19 @@ private struct ItemRow: View {
                 store.nudge(ids: targets.map(\.id), by: nudge)
             } else if let sendToFront {
                 store.send(ids: targets.map(\.id), toFront: sendToFront)
+            }
+        }
+    }
+
+    /// 打开方式子菜单：默认应用排最前，点击用所选应用打开
+    @ViewBuilder
+    private var openWithMenu: some View {
+        let apps = OpenWithCatalog.apps(for: item.url)
+        Menu("打开方式") {
+            ForEach(apps, id: \.url.absoluteString) { app in
+                Button(app.name) {
+                    OpenWithCatalog.open(item.url, withApplicationAt: app.url)
+                }
             }
         }
     }
