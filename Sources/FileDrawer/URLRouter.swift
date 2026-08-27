@@ -13,6 +13,8 @@ enum URLRouter {
     enum Action: Equatable {
         case add(paths: [String], group: String?)
         case reveal(path: String)
+        case remove(group: String?, limit: Int)
+        case clear(group: String?)
         case toggle
         case expand
         case collapse
@@ -49,6 +51,16 @@ enum URLRouter {
 
         case "expand":
             return .expand
+
+        case "remove":
+            let limit = queryItems
+                .first(where: { $0.name == "limit" })?
+                .value
+                .flatMap { Int($0) } ?? 0
+            return .remove(group: group, limit: max(0, limit))
+
+        case "clear":
+            return .clear(group: group)
 
         case "collapse":
             return .collapse

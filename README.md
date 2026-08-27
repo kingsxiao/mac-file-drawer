@@ -127,6 +127,8 @@ open "filedrawer://reveal?path=/tmp/报告.pdf"                       # 在访�
 open "filedrawer://toggle"                                          # 展开 ↔ 收起
 open "filedrawer://expand"                                          # 展开
 open "filedrawer://collapse"                                        # 收起
+open "filedrawer://remove?group=工作&limit=3"                       # 移除分组最新 3 条（0=全部，可还原）
+open "filedrawer://clear?group=工作"                                # 清空分组（可还原）
 ```
 
 路径含中文 / 空格时 `open` 会自动做百分号编码，无需手工处理；
@@ -137,7 +139,9 @@ open "filedrawer://collapse"                                        # 收起
 
 - **放入抽屉**：接收前序动作输出的文件，放进指定分组（不存在则创建），返回实际新增数；
 - **读取抽屉**：把抽屉 / 指定分组的文件（最新在前、可选上限）作为输出交给后续动作；
-- **展开抽屉**：展开 / 收起 / 两态切换。
+- **展开抽屉**：展开 / 收起 / 两态切换；
+- **移除抽屉条目** / **清空抽屉分组**：按分组移除最新 N 条（0=全部）或整组清空，
+  都走抽屉内「还原」路径——「读取 → 处理 → 移除已处理」的自动化闭环由此打通。
 
 URL Scheme 与快捷指令走同一条命令路径（`DrawerCommands`），行为永远一致。
 

@@ -248,3 +248,12 @@
 "展开 ↔ 收起" = "Toggle";
 "展开" = "Expand";
 "收起" = "Collapse";
+
+/* 批次34：移除/清空自动化 */
+"没有可移除的条目" = "Nothing to remove";
+"分组为空" = "Group is empty";
+"移除抽屉条目" = "Remove Drawer Items";
+"从分组（默认当前分组）移除条目；数量为 0 表示全部移除，移除后可在抽屉里「还原」。" = "Removes items from a group (current if unset); 0 removes all. Undoable in the drawer.";
+"数量（0=全部）" = "Count (0 = all)";
+"清空抽屉分组" = "Clear Drawer Group";
+"清空指定分组（默认当前分组）的全部条目，移除后可在抽屉里「还原」。" = "Clears all items in a group (current if unset). Undoable in the drawer.";

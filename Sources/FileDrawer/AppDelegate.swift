@@ -649,6 +649,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             expandDrawer()
             DrawerCommands.reveal(path: path)
 
+        case .remove(let group, let limit):
+            let removed = DrawerCommands.removeItems(group: group, limit: limit)
+            if removed == 0 { ShelfStore.shared.postNotice(L10n.t("没有可移除的条目")) }
+
+        case .clear(let group):
+            let cleared = DrawerCommands.clearGroup(group)
+            if cleared == 0 { ShelfStore.shared.postNotice(L10n.t("分组为空")) }
+
         case .toggle:
             DrawerCommands.setExpansion(expand: nil)
 

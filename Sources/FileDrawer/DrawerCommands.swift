@@ -60,6 +60,43 @@ enum DrawerCommands {
             .map(\.url)
     }
 
+    /// 解析分组名 → 分组 ID（nil / 未命中 = 当前分组）
+    private static func drawerID(named rawGroup: String?) -> UUID? {
+        let store = ShelfStore.shared
+        guard let rawGroup,
+              !rawGroup.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return store.currentDrawerID
+        }
+        return store.drawers.first { $0.name == rawGroup }?.id
+    }
+
+    /// 移除条目：分组可选（默认当前），limit>0 只移最新 N 个（0=全部）；走可还原路径
+    @discardableResult
+    static func removeItems(group: String? = nil, limit: Int = 0) -> Int {
+        let store = ShelfStore.shared
+        guard let drawerID = drawerID(named: group) else { return 0 }
+        let candidates = store.items(in: drawerID).sorted { $0.addedAt > $1.addedAt }
+        let targets = limit > 0 ? Array(candidates.prefix(limit)) : Array(candidates)
+        guard !targets.isEmpty else { return 0 }
+        withAnimation(.spring(response: 0.32, dampingFraction: 0.8)) {
+            store.remove(targets)
+        }
+        return targets.count
+    }
+
+    /// 清空分组（默认当前分组）；走可还原路径。返回清掉的条数。
+    @discardableResult
+    static func clearGroup(_ group: String? = nil) -> Int {
+        let store = ShelfStore.shared
+        // clear() 的作用域是当前分组：目标是其他分组时先切换
+        if let drawerID = drawerID(named: group), drawerID != store.currentDrawerID {
+            store.switchDrawer(to: drawerID)
+        }
+        let before = store.currentItems.count
+        store.clear()
+        return before
+    }
+
     /// 展开 / 收起 / 切换
     static func setExpansion(expand: Bool?) {
         guard let delegate = NSApp.delegate as? AppDelegate else { return }

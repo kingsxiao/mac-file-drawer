@@ -91,6 +91,38 @@ struct SetDrawerExpansionIntent: AppIntent {
     }
 }
 
+
+// MARK: 移除 / 清空
+
+struct RemoveDrawerItemsIntent: AppIntent {
+    static let title: LocalizedStringResource = "移除抽屉条目"
+    static let description = IntentDescription("从分组（默认当前分组）移除条目；数量为 0 表示全部移除，移除后可在抽屉里「还原」。")
+
+    @Parameter(title: "分组（可选，默认当前分组）")
+    var group: String?
+
+    @Parameter(title: "数量（0=全部）", default: 0)
+    var limit: Int
+
+    @MainActor
+    func perform() async throws -> some IntentResult & ReturnsValue<Int> {
+        .result(value: DrawerCommands.removeItems(group: group, limit: limit))
+    }
+}
+
+struct ClearDrawerGroupIntent: AppIntent {
+    static let title: LocalizedStringResource = "清空抽屉分组"
+    static let description = IntentDescription("清空指定分组（默认当前分组）的全部条目，移除后可在抽屉里「还原」。")
+
+    @Parameter(title: "分组（可选，默认当前分组）")
+    var group: String?
+
+    @MainActor
+    func perform() async throws -> some IntentResult & ReturnsValue<Int> {
+        .result(value: DrawerCommands.clearGroup(group))
+    }
+}
+
 // MARK: App Shortcuts（快捷指令 App 里的入口短语）
 
 struct FileDrawerShortcuts: AppShortcutsProvider {
@@ -113,6 +145,18 @@ struct FileDrawerShortcuts: AppShortcutsProvider {
             phrases: ["展开\(.applicationName)的抽屉", "收起\(.applicationName)抽屉"],
             shortTitle: "展开抽屉",
             systemImageName: "sidebar.trailing"
+        )
+        AppShortcut(
+            intent: RemoveDrawerItemsIntent(),
+            phrases: ["移除\(.applicationName)抽屉条目", "清空\(.applicationName)抽屉分组"],
+            shortTitle: "移除抽屉条目",
+            systemImageName: "trash"
+        )
+        AppShortcut(
+            intent: ClearDrawerGroupIntent(),
+            phrases: ["清空\(.applicationName)的抽屉分组"],
+            shortTitle: "清空抽屉分组",
+            systemImageName: "trash.slash"
         )
     }
 }
