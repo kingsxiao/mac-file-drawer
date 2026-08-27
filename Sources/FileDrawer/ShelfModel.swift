@@ -232,8 +232,9 @@ final class ShelfStore: ObservableObject {
         if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil {
             settleInbox()
         }
-        // init 内赋值不触发 didSet：分组结构落盘一次
+        // init 内赋值不触发 didSet：分组结构与（可能的）迁移结果立即落盘
         persistDrawers()
+        flushPersist()
         // init 内赋值不触发 didSet：启动时手动扫一遍存在性
         refreshMissingStatus()
     }
@@ -783,7 +784,7 @@ final class ShelfStore: ObservableObject {
 
     /// 退出前收尾：持久化 + 清扫失去引用的物化文件
     func prepareForTermination() {
-        persist()
+        flushPersist()
         settleInbox()
     }
 
@@ -903,7 +904,26 @@ final class ShelfStore: ObservableObject {
         )
     }
 
+    /// 落盘防抖任务（高频变化——拖拽重排 / 置顶切换 / 批量操作——合并成一次编码）
+    private var persistTask: Task<Void, Never>?
+
+    /// 防抖落盘：150ms 内的连续变化合并成一次全量编码（items didSet 高频触发）。
+    /// 立即落盘走 flushPersist（退出 / 测试 / 迁移后）。
     func persist() {
+        persistTask?.cancel()
+        persistTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 150_000_000)
+            guard !Task.isCancelled, let self else { return }
+            let snapshot = self.items
+            guard let data = try? JSONEncoder().encode(snapshot) else { return }
+            UserDefaults.standard.set(data, forKey: Self.defaultsKey)
+        }
+    }
+
+    /// 取消防抖并立即同步落盘
+    func flushPersist() {
+        persistTask?.cancel()
+        persistTask = nil
         if let data = try? JSONEncoder().encode(items) {
             UserDefaults.standard.set(data, forKey: Self.defaultsKey)
         }
