@@ -4,6 +4,12 @@ import XCTest
 /// 多抽屉（分组）：迁移、增删改名、当前分组作用域、跨组移动
 final class DrawerGroupTests: XCTestCase {
 
+    override func tearDownWithError() throws {
+        MainActor.assumeIsolated {
+            ShelfStore.shared.discardUndo()
+        }
+    }
+
     private func item(_ name: String) -> ShelfItem {
         ShelfItem(url: URL(fileURLWithPath: "/tmp/分组-\(name)"))
     }

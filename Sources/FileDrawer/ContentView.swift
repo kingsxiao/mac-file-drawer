@@ -127,7 +127,8 @@ struct ContentView: View {
                     hairline
                 }
 
-                if store.items.isEmpty {
+                if store.currentItems.isEmpty {
+                    // 当前分组为空（含全部分组都空）：展示拖放空态，可直接接收文件
                     Spacer(minLength: 0)
                     EmptyStateView(isTargeted: isDropTargeted)
                     Spacer(minLength: 0)

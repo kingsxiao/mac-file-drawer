@@ -677,8 +677,14 @@ final class ShelfStore: ObservableObject {
         settleInbox()
     }
 
-    /// 收件箱清扫：删除不再被任何条目引用（也无待还原快照保护）的物化文件
+    /// 收件箱清扫：删除不再被任何条目引用（也无待还原快照保护）的物化文件。
+    /// 测试进程必须先注入 inboxDirectoryOverride 才允许清扫——
+    /// 否则共享 store 上残留的测试快照可能把真实收件箱里的用户数据当垃圾删掉。
     private func settleInbox() {
+        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil,
+           inboxDirectoryOverride == nil {
+            return
+        }
         var referenced = Set(items.map(\.path))
         if let snapshot = undoSnapshot {
             snapshot.entries.forEach { referenced.insert($0.item.path) }

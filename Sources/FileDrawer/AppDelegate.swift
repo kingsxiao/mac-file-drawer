@@ -542,7 +542,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// 导出全部条目到所选文件夹（拷贝，同名自动序号；失效条目跳过）
     @objc private func exportAllAction() {
         let store = ShelfStore.shared
-        guard !store.items.isEmpty else {
+        guard !store.currentItems.isEmpty else {
             NSSound.beep()
             return
         }

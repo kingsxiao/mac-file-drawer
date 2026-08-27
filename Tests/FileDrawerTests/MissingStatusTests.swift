@@ -4,6 +4,12 @@ import XCTest
 /// 失效条目实时检测：后台扫描 → missingIDs → 展示层降透明
 final class MissingStatusTests: XCTestCase {
 
+    override func tearDownWithError() throws {
+        MainActor.assumeIsolated {
+            ShelfStore.shared.discardUndo()
+        }
+    }
+
     /// 主线程自旋等待（存在性扫描在 utility 队列异步完成）
     @MainActor
     private func waitUntil(
