@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import Combine
 import ImageIO
 import AVFoundation
 import PDFKit
@@ -44,6 +45,8 @@ final class ShelfStore: ObservableObject {
     /// 缩略图缓存（图片/视频真实预览）
     @Published var thumbs: [UUID: NSImage] = [:]
     private var thumbFailed = Set<UUID>()
+    /// 设置里重新打开缩略图时，为已经显示过（错过 onAppear）的行补齐
+    private var thumbnailSettingCancellable: AnyCancellable?
 
     private init() {
         if let data = UserDefaults.standard.data(forKey: Self.defaultsKey),
@@ -55,6 +58,17 @@ final class ShelfStore: ObservableObject {
                 items = saved
             }
         }
+        // dropFirst：跳过订阅时的当前值，只在「从关到开」时补齐
+        thumbnailSettingCancellable = AppSettings.shared.$showThumbnails
+            .dropFirst()
+            .removeDuplicates()
+            .filter { $0 }
+            .receive(on: DispatchQueue.main)
+            .sink { _ in
+                MainActor.assumeIsolated {
+                    ShelfStore.shared.ensureThumbsForAll()
+                }
+            }
     }
 
     func add(urls: [URL]) {
@@ -100,6 +114,12 @@ final class ShelfStore: ObservableObject {
             }
             await ShelfStore.shared.setThumb(image, for: id)
         }
+    }
+
+    /// 为当前所有条目补齐缩略图（设置重新打开时调用；已有/已失败的会自动跳过）
+    func ensureThumbsForAll() {
+        guard AppSettings.shared.showThumbnails else { return }
+        for item in items { ensureThumb(for: item) }
     }
 
     @MainActor
