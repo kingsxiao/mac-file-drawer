@@ -22,7 +22,7 @@ struct FileIconStyle: Equatable {
 
 struct FileKind: Equatable {
     /// 粗分类：排序分组与缩略图策略使用
-    enum Variant: Equatable {
+    enum Variant: Equatable, Hashable {
         case folder, pdf, document, spreadsheet, presentation, image, video, audio, archive, code, design, font, other
     }
 

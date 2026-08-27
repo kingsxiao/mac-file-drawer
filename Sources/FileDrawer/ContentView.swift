@@ -956,35 +956,39 @@ private struct ItemRow: View {
         return Color.primary.opacity(hovered ? 0.08 : 0.04)
     }
 
-    /// 搜索命中时高亮名称中的匹配片段
+    /// 搜索命中时高亮名称中的匹配片段（kind: 语法只高亮名称关键字部分）
     @ViewBuilder
     private var highlightName: some View {
-        let query = interaction.searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let keywords = InteractionModel.parseQuery(interaction.searchText)
+            .keywords
+            .filter { !$0.isEmpty && item.name.localizedStandardContains($0) }
 
-        if query.isEmpty || !item.name.localizedStandardContains(query) {
+        if keywords.isEmpty {
             Text(item.name)
                 .font(.system(size: 13, weight: .medium))
                 .lineLimit(1)
                 .truncationMode(.middle)
         } else {
-            Text(highlightedText(item.name, query: query))
+            Text(Self.highlighted(item.name, keywords: keywords))
                 .font(.system(size: 13, weight: .medium))
                 .lineLimit(1)
                 .truncationMode(.middle)
         }
     }
 
-    private func highlightedText(_ text: String, query: String) -> AttributedString {
+    private static func highlighted(_ text: String, keywords: [String]) -> AttributedString {
         var attributed = AttributedString(text)
         let lowerText = text.lowercased()
-        let lowerQuery = query.lowercased()
-        var searchStart = lowerText.startIndex
-        while let range = lowerText.range(of: lowerQuery, range: searchStart..<lowerText.endIndex) {
-            if let attr = Range(range, in: attributed) {
-                attributed[attr].foregroundColor = DrawerTheme.accent
-                attributed[attr].font = .system(size: 13, weight: .bold)
+        for keyword in keywords {
+            let lowerQuery = keyword.lowercased()
+            var searchStart = lowerText.startIndex
+            while let range = lowerText.range(of: lowerQuery, range: searchStart..<lowerText.endIndex) {
+                if let attr = Range(range, in: attributed) {
+                    attributed[attr].foregroundColor = DrawerTheme.accent
+                    attributed[attr].font = .system(size: 13, weight: .bold)
+                }
+                searchStart = range.upperBound
             }
-            searchStart = range.upperBound
         }
         return attributed
     }
@@ -1153,7 +1157,7 @@ private struct SearchBarView: View {
 
             ZStack(alignment: .leading) {
                 if interaction.searchText.isEmpty {
-                    Text("搜索抽屉中的文件")
+                    Text("搜索名称或 kind:图片")
                         .font(.system(size: 12.5))
                         .foregroundStyle(.tertiary)
                         .allowsHitTesting(false)

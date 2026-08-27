@@ -84,10 +84,67 @@ final class InteractionModel: ObservableObject {
 
     // MARK: 纯函数（可单测，无隔离）
 
+    /// 搜索词解析：`kind:图片 swift` → 类型过滤 + 名称关键字（多个关键字取交集）
+    struct SearchQuery: Equatable {
+        var keywords: [String] = []
+        var variants: Set<FileKind.Variant> = []
+
+        var isEmpty: Bool { keywords.isEmpty && variants.isEmpty }
+    }
+
+    /// kind: 关键字 → 类型（中英文别名）
+    nonisolated static func variant(forKindKeyword raw: String) -> FileKind.Variant? {
+        let keyword = raw.lowercased()
+        let aliases: [(FileKind.Variant, [String])] = [
+            (.folder, ["folder", "文件夹", "目录", "dir"]),
+            (.image, ["image", "图片", "照片", "photo", "img"]),
+            (.video, ["video", "视频", "影片", "movie"]),
+            (.audio, ["audio", "音频", "音乐", "music", "sound"]),
+            (.pdf, ["pdf"]),
+            (.document, ["document", "doc", "文档", "文本", "text"]),
+            (.spreadsheet, ["spreadsheet", "sheet", "表格", "excel"]),
+            (.presentation, ["presentation", "slides", "演示", "ppt", "keynote"]),
+            (.code, ["code", "代码", "source", "源码"]),
+            (.design, ["design", "设计"]),
+            (.font, ["font", "字体"]),
+            (.archive, ["archive", "压缩", "压缩包", "zip", "归档"]),
+            (.other, ["other", "其他"]),
+        ]
+        for (variant, words) in aliases where words.contains(keyword) {
+            return variant
+        }
+        return nil
+    }
+
+    /// 解析搜索词：kind: 前缀 token 进类型过滤，其余 token 是名称关键字
+    nonisolated static func parseQuery(_ raw: String) -> SearchQuery {
+        var query = SearchQuery()
+        for token in raw.split(whereSeparator: { $0.isWhitespace }) {
+            let word = String(token)
+            let lower = word.lowercased()
+            if lower.hasPrefix("kind:"), let variant = variant(forKindKeyword: String(lower.dropFirst(5))) {
+                query.variants.insert(variant)
+            } else if lower.hasPrefix("type:"), let variant = variant(forKindKeyword: String(lower.dropFirst(5))) {
+                query.variants.insert(variant)
+            } else {
+                query.keywords.append(word)
+            }
+        }
+        return query
+    }
+
     nonisolated static func filter(_ items: [ShelfItem], query: String) -> [ShelfItem] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return items }
-        return items.filter { $0.name.localizedStandardContains(trimmed) }
+        let parsed = parseQuery(trimmed)
+        guard !parsed.isEmpty else { return items }
+        return items.filter { item in
+            guard parsed.variants.isEmpty || parsed.variants.contains(item.kind.variant) else { return false }
+            for keyword in parsed.keywords where !item.name.localizedStandardContains(keyword) {
+                return false
+            }
+            return true
+        }
     }
 
     nonisolated static func sorted(_ items: [ShelfItem], by mode: SortMode) -> [ShelfItem] {
