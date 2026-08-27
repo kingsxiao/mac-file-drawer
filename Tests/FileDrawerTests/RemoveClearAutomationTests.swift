@@ -160,4 +160,52 @@ final class RemoveClearAutomationTests: XCTestCase {
             XCTAssertEqual(DrawerCommands.setPinned(group: "不存在的分组名", pinned: true), 0)
         }
     }
+
+    // MARK: - 移动 / 重命名（批次36）
+
+    func testURLMoveAndRenameParsing() {
+        XCTAssertEqual(
+            action("filedrawer://move?to=归档"),
+            .move(group: nil, to: "归档", limit: 0)
+        )
+        XCTAssertEqual(
+            action("filedrawer://move?group=下载&to=归档&limit=2"),
+            .move(group: "下载", to: "归档", limit: 2)
+        )
+        XCTAssertEqual(action("filedrawer://move?to=%20"), .move(group: nil, to: nil, limit: 0), "空白目标视为未指定")
+        XCTAssertEqual(
+            action("filedrawer://rename?path=/tmp/a.txt&name=b.txt"),
+            .rename(path: "/tmp/a.txt", newName: "b.txt")
+        )
+        XCTAssertNil(action("filedrawer://rename?path=/tmp/a.txt"), "rename 缺 name 参数")
+    }
+
+    func testMoveAndRenameSemantics() throws {
+        let (store, groupID, dir) = try stageGroup(["甲.txt", "乙.txt", "丙.txt"])
+        try MainActor.assumeIsolated {
+            defer { try? FileManager.default.removeItem(at: dir) }
+            let groupName = store.drawers.first { $0.id == groupID }!.name
+            let currentBefore = store.currentDrawerID
+
+            // 目标分组不存在 → 创建且不切换当前视图；limit 取最新 2 条（甲、乙）
+            let drawersBefore = store.drawers.count
+            XCTAssertEqual(DrawerCommands.moveItems(group: groupName, to: "归档-\(UUID().uuidString.prefix(4))", limit: 2), 2)
+            XCTAssertEqual(store.currentDrawerID, currentBefore, "自动化建目标分组不应切换当前视图")
+            XCTAssertEqual(store.items(in: groupID).count, 1)
+            XCTAssertEqual(store.drawers.count, drawersBefore + 1, "目标分组不存在时应新建")
+
+            // 源=目标 → 无操作
+            let targetName = store.drawers.last { $0.id != groupID }!.name
+            XCTAssertEqual(DrawerCommands.moveItems(group: groupName, to: groupName), 0)
+
+            // 重命名：按路径命中（磁盘文件同步改名）
+            let item = store.items(in: groupID).first!
+            XCTAssertTrue(DrawerCommands.renameItem(path: item.path, to: "改名后.txt"))
+            XCTAssertEqual(store.items(in: groupID).first?.name, "改名后.txt")
+            XCTAssertTrue(FileManager.default.fileExists(atPath: dir.appendingPathComponent("改名后.txt").path))
+            // 路径未命中 → false
+            XCTAssertFalse(DrawerCommands.renameItem(path: "/tmp/绝不存在的路径-\(UUID()).txt", to: "x.txt"))
+        }
+    }
+
 }

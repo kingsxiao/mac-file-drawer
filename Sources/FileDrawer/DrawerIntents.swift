@@ -161,6 +161,44 @@ struct SendToFrontIntent: AppIntent {
     }
 }
 
+
+// MARK: 移动到分组 / 重命名
+
+struct MoveItemsToGroupIntent: AppIntent {
+    static let title: LocalizedStringResource = "移动条目到分组"
+    static let description = IntentDescription("把分组（默认当前分组）的最新若干条（0=全部）移动到目标分组；目标分组不存在则创建。")
+
+    @Parameter(title: "分组（可选，默认当前分组）")
+    var group: String?
+
+    @Parameter(title: "目标分组（不存在则创建）")
+    var target: String
+
+    @Parameter(title: "数量（0=全部）", default: 0)
+    var limit: Int
+
+    @MainActor
+    func perform() async throws -> some IntentResult & ReturnsValue<Int> {
+        .result(value: DrawerCommands.moveItems(group: group, to: target, limit: limit))
+    }
+}
+
+struct RenameItemIntent: AppIntent {
+    static let title: LocalizedStringResource = "重命名抽屉条目"
+    static let description = IntentDescription("按文件路径把抽屉条目重命名（同目录改名，同名自动追加序号）。")
+
+    @Parameter(title: "文件路径")
+    var path: String
+
+    @Parameter(title: "新名称")
+    var newName: String
+
+    @MainActor
+    func perform() async throws -> some IntentResult & ReturnsValue<Bool> {
+        .result(value: DrawerCommands.renameItem(path: path, to: newName))
+    }
+}
+
 // MARK: App Shortcuts（快捷指令 App 里的入口短语）
 
 struct FileDrawerShortcuts: AppShortcutsProvider {

@@ -490,14 +490,15 @@ final class ShelfStore: ObservableObject {
         currentDrawerID = id
     }
 
-    /// 新建分组并切换过去；空名 / 重名返回 nil。名字限长 24。
+    /// 新建分组；空名 / 重名返回 nil。名字限长 24。
+    /// switchTo=false 供自动化「移动到分组」使用：建目标组但不打扰当前视图。
     @discardableResult
-    func createDrawer(named rawName: String) -> UUID? {
+    func createDrawer(named rawName: String, switchTo: Bool = true) -> UUID? {
         let name = String(rawName.trimmingCharacters(in: .whitespacesAndNewlines).prefix(24))
         guard !name.isEmpty, !drawers.contains(where: { $0.name == name }) else { return nil }
         let group = DrawerGroup(name: name)
         drawers.append(group)
-        currentDrawerID = group.id
+        if switchTo { currentDrawerID = group.id }
         return group.id
     }
 

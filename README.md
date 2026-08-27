@@ -131,6 +131,8 @@ open "filedrawer://remove?group=工作&limit=3"                       # 移除�
 open "filedrawer://clear?group=工作"                                # 清空分组（可还原）
 open "filedrawer://pin?group=工作&limit=3"                          # 置顶最新 3 条（unpin 取消）
 open "filedrawer://send-to-front?group=工作&limit=5"                # 最新 5 条移到最前（自动切手动顺序）
+open "filedrawer://move?group=下载&to=归档&limit=2"                 # 最新 2 条移到「归档」分组（不存在则建）
+open "filedrawer://rename?path=/tmp/a.txt&name=b.txt"              # 按路径重命名条目
 ```
 
 路径含中文 / 空格时 `open` 会自动做百分号编码，无需手工处理；

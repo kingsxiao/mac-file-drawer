@@ -659,6 +659,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let moved = DrawerCommands.sendToFront(group: group, limit: limit)
             if moved > 0 { expandDrawer() }
 
+        case .move(let group, let to, let limit):
+            let moved = DrawerCommands.moveItems(group: group, to: to, limit: limit)
+            if moved == 0 {
+                ShelfStore.shared.postNotice(L10n.t("没有可移动的条目"))
+            } else {
+                ShelfStore.shared.postNotice(L10n.tf("已移动 %d 个条目到「%@」", moved, to ?? ""))
+            }
+
+        case .rename(let path, let newName):
+            if !DrawerCommands.renameItem(path: path, to: newName) {
+                ShelfStore.shared.postNotice(L10n.t("重命名失败：条目不存在"))
+            }
+
         case .remove(let group, let limit):
             let removed = DrawerCommands.removeItems(group: group, limit: limit)
             if removed == 0 { ShelfStore.shared.postNotice(L10n.t("没有可移除的条目")) }

@@ -18,6 +18,8 @@ enum URLRouter {
         case pin(group: String?, limit: Int)
         case unpin(group: String?, limit: Int)
         case sendToFront(group: String?, limit: Int)
+        case move(group: String?, to: String?, limit: Int)
+        case rename(path: String, newName: String)
         case toggle
         case expand
         case collapse
@@ -73,6 +75,24 @@ enum URLRouter {
             return host == "pin"
                 ? .pin(group: group, limit: max(0, limit))
                 : .unpin(group: group, limit: max(0, limit))
+
+        case "move":
+            let limit = queryItems
+                .first(where: { $0.name == "limit" })?
+                .value
+                .flatMap { Int($0) } ?? 0
+            let target = queryItems
+                .first(where: { $0.name == "to" })?
+                .value?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            return .move(group: group, to: (target?.isEmpty == false) ? target : nil, limit: max(0, limit))
+
+        case "rename":
+            guard let path = queryItems.first(where: { $0.name == "path" })?.value,
+                  !path.isEmpty,
+                  let newName = queryItems.first(where: { $0.name == "name" })?.value,
+                  !newName.isEmpty else { return nil }
+            return .rename(path: path, newName: newName)
 
         case "send-to-front":
             let limit = queryItems

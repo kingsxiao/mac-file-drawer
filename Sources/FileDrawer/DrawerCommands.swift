@@ -123,6 +123,41 @@ enum DrawerCommands {
         return targets.count
     }
 
+    /// 条目整批移到目标分组：源分组可选（默认当前），limit>0 只移最新 N 条（0=全部）；
+    /// 目标分组不存在则创建（不切换当前视图）。源=目标视为无操作。返回移动条数。
+    @discardableResult
+    static func moveItems(group: String? = nil, to target: String?, limit: Int = 0) -> Int {
+        let store = ShelfStore.shared
+        guard let drawerID = drawerID(named: group) else { return 0 }
+        guard let targetName = target?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !targetName.isEmpty else { return 0 }
+
+        let targetID: UUID
+        if let hit = store.drawers.first(where: { $0.name == targetName }) {
+            targetID = hit.id
+        } else if let created = store.createDrawer(named: targetName, switchTo: false) {
+            targetID = created
+        } else {
+            return 0
+        }
+        guard targetID != drawerID else { return 0 }
+
+        let candidates = store.items(in: drawerID).sorted { $0.addedAt > $1.addedAt }
+        let targets = limit > 0 ? Array(candidates.prefix(limit)) : Array(candidates)
+        guard !targets.isEmpty else { return 0 }
+        store.moveItems(ids: targets.map(\.id), to: targetID)
+        return targets.count
+    }
+
+    /// 按文件路径重命名条目（同目录改名；同名自动序号）。路径未命中返回 false。
+    @discardableResult
+    static func renameItem(path: String, to newName: String) -> Bool {
+        let store = ShelfStore.shared
+        let standardized = (path as NSString).standardizingPath
+        guard let item = store.items.first(where: { $0.path == standardized }) else { return false }
+        return store.rename(id: item.id, to: newName)
+    }
+
     /// 展开 / 收起 / 切换
     static func setExpansion(expand: Bool?) {
         guard let delegate = NSApp.delegate as? AppDelegate else { return }
