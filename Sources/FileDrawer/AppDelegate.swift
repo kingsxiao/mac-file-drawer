@@ -581,7 +581,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let version = bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0.0"
         let build = bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "dev"
         let store = ShelfStore.shared
-        let stats = L10n.tf("当前 %@ 个条目 · %@ 个分组", store.items.count, store.drawers.count)
+        let stats = L10n.tf("当前 %d 个条目 · %d 个分组", store.items.count, store.drawers.count)
         let credits = [
             stats,
             L10n.t("Swift + AppKit + SwiftUI · 无第三方依赖"),
