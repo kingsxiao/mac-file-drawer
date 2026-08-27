@@ -237,7 +237,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let store = ShelfStore.shared
         let hostingView = NSHostingView(rootView: ContentView(store: store, interaction: .shared))
 
-        let screen = DrawerLayout.targetScreen(followMouse: settings.followMouseScreen) ?? NSScreen.screens[0]
+        guard let screen = DrawerLayout.targetScreen(followMouse: settings.followMouseScreen) else { return }
         let size = DrawerLayout.expandedSize(visibleFrame: screen.visibleFrame, settings: settings)
 
         panel = DrawerPanel(
@@ -284,7 +284,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // 任何路径（边条点击 / 拖放悬停 / 热键）展开都汇到这里：
             // 同步 isOpen，否则后续 targetFrame 会把窗口定位到屏幕外
             if !collapsed { self.isOpen = true }
-            let screen = DrawerLayout.targetScreen(followMouse: settings.followMouseScreen) ?? NSScreen.screens[0]
+            guard let screen = DrawerLayout.targetScreen(followMouse: settings.followMouseScreen) else { return }
             let target = collapsed
                 ? DrawerLayout.collapsedFrame(visibleFrame: screen.visibleFrame, settings: self.settings)
                 : DrawerLayout.expandedFrame(visibleFrame: screen.visibleFrame, settings: self.settings)
@@ -329,7 +329,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func placeOffscreen() {
         WindowSpringAnimator.shared.cancel()
         panel.setFrame(
-            DrawerLayout.offscreenFrame(visibleFrame: (DrawerLayout.targetScreen(followMouse: settings.followMouseScreen) ?? NSScreen.screens[0]).visibleFrame, settings: settings),
+            DrawerLayout.offscreenFrame(visibleFrame: (DrawerLayout.targetScreen(followMouse: settings.followMouseScreen)?.visibleFrame ?? .zero), settings: settings),
             display: false
         )
         isOpen = false
@@ -343,7 +343,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         isOpen = true
         animateFrame(
-            to: DrawerLayout.expandedFrame(visibleFrame: (DrawerLayout.targetScreen(followMouse: settings.followMouseScreen) ?? NSScreen.screens[0]).visibleFrame, settings: settings)
+            to: DrawerLayout.expandedFrame(visibleFrame: (DrawerLayout.targetScreen(followMouse: settings.followMouseScreen)?.visibleFrame ?? .zero), settings: settings)
         )
         refreshStatusTitle()
     }
