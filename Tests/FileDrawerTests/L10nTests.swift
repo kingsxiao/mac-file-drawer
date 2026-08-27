@@ -54,4 +54,24 @@ final class L10nTests: XCTestCase {
             XCTAssertEqual(AppSettings(defaults: defaults).language, .english, "语言选择应持久化")
         }
     }
+
+    /// isEnglish 指示与语言覆盖一致
+    func testIsEnglishIndicator() {
+        L10n.setLanguage("en")
+        XCTAssertTrue(L10n.isEnglish)
+        L10n.setLanguage("zh-Hans")
+        XCTAssertFalse(L10n.isEnglish, "显式中文不是英文")
+        L10n.setLanguage(nil)
+        // 测试进程固定中文回退（见 L10n.systemEnglishFallback 的测试守卫）
+        XCTAssertFalse(L10n.isEnglish)
+    }
+
+    /// 相对时间按界面语言格式化：英文含 ago，中文含 前
+    func testRelativeAddedFollowsLanguage() {
+        let past = Date(timeIntervalSinceNow: -3 * 3600)
+        L10n.setLanguage("en")
+        XCTAssertTrue(ShelfItem.relativeAdded(past).contains("ago"), "英文模式应为 ago 形式")
+        L10n.setLanguage("zh-Hans")
+        XCTAssertTrue(ShelfItem.relativeAdded(past).contains("前"), "中文模式应为「前」形式")
+    }
 }

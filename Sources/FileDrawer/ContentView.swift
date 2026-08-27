@@ -602,7 +602,7 @@ private struct HeaderView: View {
         } message: {
             Text(L10n.t("新建后自动切换过去；拖入 / 粘贴的文件会放进当前分组。"))
         }
-        .alert("重命名「\(store.currentDrawerName)」", isPresented: $renameDrawerVisible) {
+        .alert(L10n.tf("重命名「%@」", store.currentDrawerName), isPresented: $renameDrawerVisible) {
             TextField("分组名", text: $renameDrawerName)
             Button(L10n.t("重命名")) {
                 store.renameDrawer(id: store.currentDrawerID, to: renameDrawerName)
@@ -835,7 +835,7 @@ private struct ItemRow: View {
         .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityDescription)
-        .accessibilityHint(settings.openOnSingleClick ? "双击打开文件" : "单击选中，双击打开文件")
+        .accessibilityHint(settings.openOnSingleClick ? L10n.t("双击打开文件") : L10n.t("单击选中，双击打开文件"))
         .accessibilityAddTraits(.isButton)
         .onHover { hovering in
             withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
@@ -881,8 +881,8 @@ private struct ItemRow: View {
             return provider
         }
         .help(settings.openOnSingleClick
-              ? "单击打开 · ⌘点击多选 · 空格预览 · Delete 移除"
-              : "单击选中 · ⌘/⇧点击多选 · 双击打开 · 空格预览 · Delete 移除")
+              ? L10n.t("单击打开 · ⌘点击多选 · 空格预览 · Delete 移除")
+              : L10n.t("单击选中 · ⌘/⇧点击多选 · 双击打开 · 空格预览 · Delete 移除"))
         .alert(L10n.tf("重命名「%@」", item.name), isPresented: $renameVisible) {
             TextField(L10n.t("新名称"), text: $renameText)
             Button(L10n.t("重命名")) {
@@ -971,7 +971,7 @@ private struct ItemRow: View {
     /// 无障碍描述：名称 + （置顶 / 失效）+ 元信息
     private var accessibilityDescription: String {
         var parts = [item.name]
-        if item.pinned { parts.append("已置顶") }
+        if item.pinned { parts.append(L10n.t("已置顶")) }
         if isMissing { parts.append("文件已不存在") }
         if !displayMeta.isEmpty { parts.append(displayMeta) }
         return parts.joined(separator: "，")
@@ -1250,7 +1250,7 @@ private struct ItemRow: View {
         let dlg = NSSavePanel()
         dlg.nameFieldStringValue = item.name
         dlg.canCreateDirectories = true
-        dlg.prompt = "导出"
+        dlg.prompt = L10n.t("导出")
         if dlg.runModal() == .OK, let dest = dlg.url {
             try? FileManager.default.copyItem(at: item.url, to: dest)
         }
@@ -1638,9 +1638,9 @@ private struct PreviewOverlayView: View {
 
     private var footerHints: some View {
         HStack(spacing: 9) {
-            hintChip(key: "Space", label: "关闭")
-            hintChip(key: "↑ ↓", label: "切换")
-            hintChip(key: "⏎", label: "打开")
+            hintChip(key: "Space", label: L10n.t("关闭"))
+            hintChip(key: "↑ ↓", label: L10n.t("切换"))
+            hintChip(key: "⏎", label: L10n.t("打开"))
             Spacer(minLength: 0)
             Text(item.metaLine)
                 .font(.system(size: 10))

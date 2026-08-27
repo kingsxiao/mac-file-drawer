@@ -404,7 +404,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func refreshStatusTitle() {
-        statusItem?.button?.toolTip = isOpen ? "收起抽屉" : "展开抽屉"
+        statusItem?.button?.toolTip = isOpen ? L10n.t("收起抽屉") : L10n.t("展开抽屉")
     }
 
     // MARK: - 菜单栏图标
@@ -481,12 +481,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         hideOthers.keyEquivalentModifierMask = [.command, .option]
         appMenu.addItem(.separator())
-        appMenu.addItem(withTitle: "退出文件抽屉", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appMenu.addItem(withTitle: L10n.t("退出文件抽屉"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         appMenuItem.submenu = appMenu
         mainMenu.addItem(appMenuItem)
 
         let editMenuItem = NSMenuItem(title: L10n.t("编辑"), action: nil, keyEquivalent: "")
-        let editMenu = NSMenu(title: "编辑")
+        let editMenu = NSMenu(title: L10n.t("编辑"))
         editMenu.addItem(withTitle: L10n.t("剪切"), action: #selector(NSText.cut(_:)), keyEquivalent: "x")
         editMenu.addItem(withTitle: L10n.t("拷贝"), action: #selector(NSText.copy(_:)), keyEquivalent: "c")
         editMenu.addItem(withTitle: L10n.t("粘贴"), action: #selector(NSText.paste(_:)), keyEquivalent: "v")
@@ -513,10 +513,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let bundle = Bundle.main
         let version = bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0.0"
         let build = bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "dev"
+        let store = ShelfStore.shared
+        let stats = L10n.tf("当前 %@ 个条目 · %@ 个分组", store.items.count, store.drawers.count)
+        let credits = [
+            stats,
+            L10n.t("Swift + AppKit + SwiftUI · 无第三方依赖"),
+            L10n.t("⌥Space 呼出抽屉 · 右键条目看全部操作"),
+            L10n.t("自动化：filedrawer:// URL 与快捷指令（Shortcuts）"),
+        ].joined(separator: "\n")
         NSApp.orderFrontStandardAboutPanel(options: [
-            .applicationVersion: "版本 \(version)（\(build)）",
+            .applicationVersion: L10n.tf("版本 %@（%@）", version, build),
             .version: "",
-            .credits: "Swift + AppKit + SwiftUI · 无第三方依赖",
+            .credits: credits,
         ])
     }
 
@@ -545,7 +553,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) {
                 let result = ShelfStore.shared.add(urls: Array(dlg.urls))
                 if result.skippedDuplicates > 0 {
-                    ShelfStore.shared.postNotice("已跳过 \(result.skippedDuplicates) 个重复条目")
+                    ShelfStore.shared.postNotice(L10n.tf("已跳过 %d 个重复条目", result.skippedDuplicates))
                 }
             }
         }

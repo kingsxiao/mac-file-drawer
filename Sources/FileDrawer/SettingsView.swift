@@ -136,7 +136,7 @@ private struct GeneralSettingsTab: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 LabeledContent(L10n.t("当前分组条目")) {
-                    Text("\(store.currentItems.count) 个\(inventorySuffix)")
+                    Text("\(store.currentItems.count) \(L10n.t("个"))\(inventorySuffix)")
                         .foregroundStyle(.secondary)
                 }
                 Button(store.missingIDs.isEmpty
@@ -155,7 +155,7 @@ private struct GeneralSettingsTab: View {
                         }
                     }
                 }
-                Text("未单独设置的分组用上面的全局「容量上限」；调整后立即生效，淘汰各组内最早加入的条目（置顶豁免）。")
+                Text(L10n.t("未单独设置的分组用上面的全局「容量上限」；调整后立即生效，淘汰各组内最早加入的条目（置顶豁免）。"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -173,10 +173,10 @@ private struct GeneralSettingsTab: View {
         let current = store.currentItems
         var parts: [String] = []
         let pinned = current.filter(\.pinned).count
-        if pinned > 0 { parts.append("置顶 \(pinned)") }
+        if pinned > 0 { parts.append(L10n.tf("置顶 %d", pinned)) }
         let missing = current.filter { store.missingIDs.contains($0.id) }.count
-        if missing > 0 { parts.append("失效 \(missing)") }
-        if store.drawers.count > 1 { parts.append("共 \(store.drawers.count) 组") }
+        if missing > 0 { parts.append(L10n.tf("失效 %d", missing)) }
+        if store.drawers.count > 1 { parts.append(L10n.tf("共 %d 组", store.drawers.count)) }
         return parts.isEmpty ? "" : "（\(parts.joined(separator: " · "))）"
     }
 
@@ -193,7 +193,7 @@ private struct GeneralSettingsTab: View {
             try LoginItemController.setEnabled(on)
             loginItemError = nil
         } catch {
-            loginItemError = "未能\(on ? "开启" : "关闭")登录启动：\(error.localizedDescription)"
+            loginItemError = L10n.tf("未能%@登录启动：%@", on ? L10n.t("开启") : L10n.t("关闭"), error.localizedDescription)
         }
         // 无论成败都以系统当前状态为准
         launchAtLogin = LoginItemController.isEnabled
@@ -352,7 +352,7 @@ private struct HotKeyRecorderControl: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            Text(recording ? "请按下组合键…" : label)
+            Text(recording ? L10n.t("请按下组合键…") : label)
                 .font(.system(size: 12, weight: .medium, design: .monospaced))
                 .foregroundStyle(recording ? Color.accentColor : .primary)
                 .padding(.horizontal, 12)
@@ -367,11 +367,11 @@ private struct HotKeyRecorderControl: View {
                 )
 
             if recording {
-                Text("Esc 取消")
+                Text(L10n.t("Esc 取消"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
-                Text("点按录制")
+                Text(L10n.t("点按录制"))
                     .font(.caption)
                     .foregroundStyle(.tertiary)
             }

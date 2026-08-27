@@ -26,6 +26,14 @@ enum L10n {
         return true
     }
 
+    /// 当前是否输出英文（覆盖为 en，或跟随系统且系统回退命中英文表）
+    static var isEnglish: Bool {
+        if let overrideBundle {
+            return overrideBundle.preferredLocalizations.first?.hasPrefix("en") == true
+        }
+        return systemEnglishFallback != nil
+    }
+
     /// 翻译入口：覆盖 bundle 命中用之，否则回退中文原文
     static func t(_ key: String) -> String {
         guard let bundle = overrideBundle ?? systemEnglishFallback else { return key }

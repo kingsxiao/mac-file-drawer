@@ -95,15 +95,23 @@ extension ShelfItem {
         return parts.joined(separator: " · ")
     }
 
-    private static let relativeFormatter: RelativeDateTimeFormatter = {
+    private static let zhFormatter: RelativeDateTimeFormatter = {
         let formatter = RelativeDateTimeFormatter()
         formatter.locale = Locale(identifier: "zh_CN")
         formatter.unitsStyle = .abbreviated
         return formatter
     }()
 
+    private static let enFormatter: RelativeDateTimeFormatter = {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.locale = Locale(identifier: "en_US")
+        formatter.unitsStyle = .abbreviated
+        return formatter
+    }()
+
     static func relativeAdded(_ date: Date) -> String {
-        Self.relativeFormatter.localizedString(for: date, relativeTo: Date())
+        let formatter = L10n.isEnglish ? enFormatter : zhFormatter
+        return formatter.localizedString(for: date, relativeTo: Date())
     }
 }
 

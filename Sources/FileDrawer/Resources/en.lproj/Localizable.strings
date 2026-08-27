@@ -197,3 +197,33 @@
 "%d 个条目移动失败" = "%d items failed to move";
 "将同时修改磁盘上的文件；同名文件会自动追加序号。" = "Renames the file on disk; name collisions get a numeric suffix.";
 "新名称" = "New name";
+
+/* 批次28 追加 */
+"收起抽屉" = "Collapse Drawer";
+"未能%@登录启动：%@" = "Failed to %@ login item: %@";
+"开启" = "enable";
+"关闭" = "disable";
+"界面语言" = "Interface Language";
+"未单独设置的分组用上面的全局「容量上限」；调整后立即生效，淘汰各组内最早加入的条目（置顶豁免）。" = "Groups without an override use the global limit above; takes effect immediately, evicting oldest items per group (pinned exempt).";
+"置顶 %d" = "%d pinned";
+"失效 %d" = "%d missing";
+"共 %d 组" = "%d groups";
+"个" = "items";
+"请按下组合键…" = "Press a key combo…";
+"Esc 取消" = "Esc to cancel";
+"点按录制" = "Click to record";
+"单击打开 · ⌘点击多选 · 空格预览 · Delete 移除" = "Click to open · ⌘-click multi-select · Space preview · Delete remove";
+"单击选中 · ⌘/⇧点击多选 · 双击打开 · 空格预览 · Delete 移除" = "Click to select · ⌘/⇧ multi-select · Double-click open · Space preview · Delete remove";
+"双击打开文件" = "Double-click to open";
+"单击选中，双击打开文件" = "Click to select, double-click to open";
+"已置顶" = "Pinned";
+"切换" = "Switch";
+"重命名「%@」" = "Rename “%@”";
+"版本 %@（%@）" = "Version %@ (%@)";
+"收起抽屉" = "Collapse Drawer";
+
+/* 关于窗口 */
+"当前 %d 个条目 · %d 个分组" = "%d items · %d groups";
+"Swift + AppKit + SwiftUI · 无第三方依赖" = "Swift + AppKit + SwiftUI · zero third-party dependencies";
+"⌥Space 呼出抽屉 · 右键条目看全部操作" = "⌥Space toggles the drawer · right-click an item for all actions";
+"自动化：filedrawer:// URL 与快捷指令（Shortcuts）" = "Automation: filedrawer:// URLs and Shortcuts";
