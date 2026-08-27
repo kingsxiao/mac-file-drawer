@@ -51,12 +51,15 @@ final class ShelfStore: ObservableObject {
     private init() {
         if let data = UserDefaults.standard.data(forKey: Self.defaultsKey),
            let saved = try? JSONDecoder().decode([ShelfItem].self, from: data) {
+            var restored = saved
+            let settings = AppSettings.shared
             // 默认只保留仍然存在的文件；可在设置里关闭（保留失效条目，等手动移除）
-            if AppSettings.shared.removeMissingOnLaunch {
-                items = saved.filter { FileManager.default.fileExists(atPath: $0.path) }
-            } else {
-                items = saved
+            if settings.removeMissingOnLaunch {
+                restored = restored.filter { FileManager.default.fileExists(atPath: $0.path) }
             }
+            restored = Self.pruned(restored, policy: settings.autoClean)
+            restored = Self.trimmed(restored, limit: settings.maxItems)
+            items = restored
         }
         // dropFirst：跳过订阅时的当前值，只在「从关到开」时补齐
         thumbnailSettingCancellable = AppSettings.shared.$showThumbnails
@@ -77,12 +80,68 @@ final class ShelfStore: ObservableObject {
             guard !items.contains(where: { $0.path == path }) else { continue }
             items.append(ShelfItem(url: url))
         }
+        enforceCapacityLimit()
     }
 
     func remove(_ item: ShelfItem) {
         items.removeAll { $0.id == item.id }
         thumbs[item.id] = nil
         thumbFailed.remove(item.id)
+    }
+
+    /// 手动清理：丢弃硬盘上已不存在的条目（设置面板「立即清理」）
+    func removeMissing() {
+        let missing = items.filter { !FileManager.default.fileExists(atPath: $0.path) }
+        guard !missing.isEmpty else { return }
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+            for item in missing {
+                thumbs[item.id] = nil
+                thumbFailed.remove(item.id)
+            }
+            items.removeAll { !FileManager.default.fileExists(atPath: $0.path) }
+        }
+    }
+
+    /// 「移动到文件夹」后把条目改写为指向新路径
+    func updatePath(id: UUID, to url: URL) {
+        guard let index = items.firstIndex(where: { $0.id == id }) else { return }
+        items[index].path = url.standardizedFileURL.path
+        thumbs[id] = nil
+        thumbFailed.remove(id)
+    }
+
+    // MARK: 维护策略（纯函数，可单测）
+
+    /// 过期自动清理：丢弃加入时间早于策略窗口的条目
+    nonisolated static func pruned(_ items: [ShelfItem], policy: AutoCleanPolicy, now: Date = Date()) -> [ShelfItem] {
+        guard let days = policy.days else { return items }
+        let cutoff = now.addingTimeInterval(-Double(days) * 86_400)
+        return items.filter { $0.addedAt >= cutoff }
+    }
+
+    /// 容量上限：超出时淘汰最早加入的条目，保留原有相对顺序
+    nonisolated static func trimmed(_ items: [ShelfItem], limit: MaxItemsPolicy) -> [ShelfItem] {
+        guard let max = limit.count, items.count > max else { return items }
+        let keep = Set(
+            items
+                .sorted { $0.addedAt > $1.addedAt }
+                .prefix(max)
+                .map(\.id)
+        )
+        return items.filter { keep.contains($0.id) }
+    }
+
+    @MainActor
+    private func enforceCapacityLimit() {
+        let capped = Self.trimmed(items, limit: AppSettings.shared.maxItems)
+        if capped.count != items.count {
+            let removed = Set(items.map(\.id)).subtracting(Set(capped.map(\.id)))
+            for id in removed {
+                thumbs[id] = nil
+                thumbFailed.remove(id)
+            }
+            items = capped
+        }
     }
 
     func clear() {

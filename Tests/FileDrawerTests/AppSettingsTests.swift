@@ -71,7 +71,7 @@ final class AppSettingsTests: XCTestCase {
             XCTAssertTrue(reloaded.hotKeyEnabled)
             XCTAssertEqual(reloaded.hotKeyBinding?.keyCode, 1)
             XCTAssertEqual(reloaded.hotKeyBinding?.modifiers, [.command, .shift])
-            XCTAssertEqual(reloaded.hotKeyLabel, "⇧⌘ S")
+            XCTAssertEqual(reloaded.hotKeyLabel, "⇧⌘S")
         }
     }
 
@@ -129,8 +129,8 @@ final class AppSettingsTests: XCTestCase {
                 accuracy: 0.01
             )
 
-            // 收起边条：42 宽、垂直居中
-            let collapsed = DrawerLayout.collapsedFrame(visibleFrame: vf)
+            // 收起边条：42 宽、垂直居中、贴右缘
+            let collapsed = DrawerLayout.collapsedFrame(visibleFrame: vf, settings: s)
             XCTAssertEqual(collapsed.width, 42, accuracy: 0.01)
             XCTAssertEqual(collapsed.maxX, vf.maxX, accuracy: 0.01)
             XCTAssertEqual(collapsed.midY, vf.midY, accuracy: 0.01)
@@ -138,6 +138,15 @@ final class AppSettingsTests: XCTestCase {
             // 屏幕外：完全在右缘之外
             let offscreen = DrawerLayout.offscreenFrame(visibleFrame: vf, settings: s)
             XCTAssertEqual(offscreen.minX, vf.maxX + 4, accuracy: 0.01)
+
+            // 左缘停靠：贴左缘，收起边条与屏幕外都朝左
+            s.edge = .left
+            let leftExpanded = DrawerLayout.expandedFrame(visibleFrame: vf, settings: s)
+            XCTAssertEqual(leftExpanded.minX, vf.minX, accuracy: 0.01)
+            let leftCollapsed = DrawerLayout.collapsedFrame(visibleFrame: vf, settings: s)
+            XCTAssertEqual(leftCollapsed.minX, vf.minX, accuracy: 0.01)
+            let leftOffscreen = DrawerLayout.offscreenFrame(visibleFrame: vf, settings: s)
+            XCTAssertEqual(leftOffscreen.maxX, vf.minX - 4, accuracy: 0.01)
         }
     }
 
@@ -170,7 +179,7 @@ final class AppSettingsTests: XCTestCase {
 
     func testHotKeyBindingLabelAndValidity() {
         XCTAssertEqual(HotKeyBinding(keyCode: 49, modifiers: [.option]).displayLabel, "⌥ Space")
-        XCTAssertEqual(HotKeyBinding(keyCode: 0, modifiers: [.command, .shift]).displayLabel, "⇧⌘ A")
+        XCTAssertEqual(HotKeyBinding(keyCode: 0, modifiers: [.command, .shift]).displayLabel, "⇧⌘A")
         XCTAssertEqual(HotKeyBinding(keyCode: 122, modifiers: [.control, .option]).displayLabel, "⌃⌥ F1")
 
         // 必须带 ⌘/⌥/⌃；⇧ 单独无效；键码 0 无效

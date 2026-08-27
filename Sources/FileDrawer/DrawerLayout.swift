@@ -18,7 +18,7 @@ enum DrawerLayout {
         return CGSize(width: CGFloat(settings.drawerWidth), height: height)
     }
 
-    /// 展开态：贴右缘，按设置的垂直位置停靠
+    /// 展开态：按设置停靠左缘或右缘，垂直位置同样受设置控制
     static func expandedFrame(visibleFrame: NSRect, settings: AppSettings) -> NSRect {
         let size = expandedSize(visibleFrame: visibleFrame, settings: settings)
         let y: CGFloat
@@ -29,28 +29,31 @@ enum DrawerLayout {
         }
         // 抽屉高度下限可能超出小屏可视区：夹住不让 y 越界
         let clampedY = min(max(y, visibleFrame.minY), max(visibleFrame.minY, visibleFrame.maxY - size.height))
-        return NSRect(
-            x: visibleFrame.maxX - size.width,
-            y: clampedY,
-            width: size.width,
-            height: size.height
-        )
+        let x = settings.edge == .right
+            ? visibleFrame.maxX - size.width
+            : visibleFrame.minX
+        return NSRect(x: x, y: clampedY, width: size.width, height: size.height)
     }
 
-    /// 收起态：窄边条贴右缘、垂直居中
-    static func collapsedFrame(visibleFrame: NSRect) -> NSRect {
-        NSRect(
-            x: visibleFrame.maxX - collapsedTabSize.width,
+    /// 收起态：窄边条贴停靠边缘、垂直居中
+    static func collapsedFrame(visibleFrame: NSRect, settings: AppSettings) -> NSRect {
+        let x = settings.edge == .right
+            ? visibleFrame.maxX - collapsedTabSize.width
+            : visibleFrame.minX
+        return NSRect(
+            x: x,
             y: visibleFrame.minY + (visibleFrame.height - collapsedTabSize.height) / 2,
             width: collapsedTabSize.width,
             height: collapsedTabSize.height
         )
     }
 
-    /// 屏幕外（启动前 / 滑出后）
+    /// 屏幕外（启动前 / 滑出后）：朝停靠侧完全滑出屏幕
     static func offscreenFrame(visibleFrame: NSRect, settings: AppSettings) -> NSRect {
         var frame = expandedFrame(visibleFrame: visibleFrame, settings: settings)
-        frame.origin.x = visibleFrame.maxX + 4
+        frame.origin.x = settings.edge == .right
+            ? visibleFrame.maxX + 4
+            : visibleFrame.minX - frame.width - 4
         return frame
     }
 }

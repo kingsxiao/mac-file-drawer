@@ -88,6 +88,14 @@ final class KeyboardRouter {
                 return nil
             }
 
+        case 51: // Delete：移除选中条目
+            if let item = model.selectedItem(in: displayed) {
+                withAnimation(.spring(response: 0.32, dampingFraction: 0.8)) {
+                    store.remove(item)
+                }
+                return nil
+            }
+
         default:
             break
         }
@@ -155,9 +163,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self, self.panel != nil else { return }
             let screen = NSScreen.main ?? NSScreen.screens[0]
             let target = collapsed
-                ? DrawerLayout.collapsedFrame(visibleFrame: screen.visibleFrame)
+                ? DrawerLayout.collapsedFrame(visibleFrame: screen.visibleFrame, settings: self.settings)
                 : DrawerLayout.expandedFrame(visibleFrame: screen.visibleFrame, settings: self.settings)
-            self.animateFrame(to: target, duration: 0.38)
+            self.animateFrame(to: target)
         }
 
         // 设置变化 → 外观 / 层级 / 热键 / 边框即时生效
@@ -185,17 +193,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - 展开 / 收起 / 隐藏
 
-    private func animateFrame(to frame: NSRect, duration: CGFloat) {
-        NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = duration
-            ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-            ctx.allowsImplicitAnimation = true
-            panel.animator().setFrame(frame, display: true)
-        }
+    /// 窗口 frame 动画统一走弹簧物理（带轻微过冲回弹），
+    /// 抽屉滑入滑出更有"从屏幕里抽出来"的手感。
+    private func animateFrame(to frame: NSRect) {
+        WindowSpringAnimator.shared.animate(window: panel, to: frame)
     }
 
     /// 初始停在屏幕外
     private func placeOffscreen() {
+        WindowSpringAnimator.shared.cancel()
         panel.setFrame(
             DrawerLayout.offscreenFrame(visibleFrame: (NSScreen.main ?? NSScreen.screens[0]).visibleFrame, settings: settings),
             display: false
@@ -211,8 +217,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         isOpen = true
         animateFrame(
-            to: DrawerLayout.expandedFrame(visibleFrame: (NSScreen.main ?? NSScreen.screens[0]).visibleFrame, settings: settings),
-            duration: 0.42
+            to: DrawerLayout.expandedFrame(visibleFrame: (NSScreen.main ?? NSScreen.screens[0]).visibleFrame, settings: settings)
         )
         refreshStatusTitle()
     }
@@ -262,13 +267,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// 按当前状态（展开 / 收起 / 屏幕外）立即贴边定位
     private func repositionPanel() {
         guard let screen = NSScreen.main ?? NSScreen.screens.first else { return }
+        // 直接定位前终止弹簧，避免动画把窗口又拉回旧目标
+        WindowSpringAnimator.shared.cancel()
         panel.setFrame(targetFrame(for: screen), display: true)
     }
 
     private func targetFrame(for screen: NSScreen) -> NSRect {
         let visibleFrame = screen.visibleFrame
         if InteractionModel.shared.isCollapsed {
-            return DrawerLayout.collapsedFrame(visibleFrame: visibleFrame)
+            return DrawerLayout.collapsedFrame(visibleFrame: visibleFrame, settings: settings)
         } else if isOpen {
             return DrawerLayout.expandedFrame(visibleFrame: visibleFrame, settings: settings)
         } else {
@@ -310,6 +317,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let appMenuItem = NSMenuItem(title: "文件抽屉", action: nil, keyEquivalent: "")
         let appMenu = NSMenu()
         appMenu.addItem(withTitle: "设置…", action: #selector(settingsAction), keyEquivalent: ",")
+        appMenu.addItem(.separator())
+        // 头部空间有限，导入 / 清空收进菜单（拖拽仍是放入文件的主方式）
+        appMenu.addItem(withTitle: "导入文件…", action: #selector(importAction), keyEquivalent: "o")
+        appMenu.addItem(withTitle: "清空抽屉", action: #selector(clearAction), keyEquivalent: "")
         appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "隐藏文件抽屉", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         let hideOthers = appMenu.addItem(

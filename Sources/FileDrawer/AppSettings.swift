@@ -67,6 +67,105 @@ enum DrawerPanelLevel: Int, CaseIterable, Identifiable {
     }
 }
 
+/// 抽屉底色材质（毛玻璃浓度）
+enum DrawerMaterial: Int, CaseIterable, Identifiable {
+    case ultraThin
+    case thin
+    case thick
+    case ultraThick
+
+    var id: Int { rawValue }
+
+    var label: String {
+        switch self {
+        case .ultraThin: return "超薄"
+        case .thin: return "薄"
+        case .thick: return "厚"
+        case .ultraThick: return "超厚"
+        }
+    }
+
+    var material: Material {
+        switch self {
+        case .ultraThin: return .ultraThinMaterial
+        case .thin: return .thinMaterial
+        case .thick: return .thickMaterial
+        case .ultraThick: return .ultraThickMaterial
+        }
+    }
+}
+
+/// 抽屉停靠的屏幕边缘（拉手与圆角在贴边侧的对侧）
+enum DrawerEdge: Int, CaseIterable, Identifiable {
+    case right
+    case left
+
+    var id: Int { rawValue }
+
+    var label: String {
+        switch self {
+        case .right: return "右侧"
+        case .left: return "左侧"
+        }
+    }
+}
+
+/// 过期条目自动清理策略
+enum AutoCleanPolicy: Int, CaseIterable, Identifiable {
+    case off
+    case oneDay
+    case week
+    case month
+
+    var id: Int { rawValue }
+
+    var label: String {
+        switch self {
+        case .off: return "关闭"
+        case .oneDay: return "1 天后"
+        case .week: return "7 天后"
+        case .month: return "30 天后"
+        }
+    }
+
+    var days: Int? {
+        switch self {
+        case .off: return nil
+        case .oneDay: return 1
+        case .week: return 7
+        case .month: return 30
+        }
+    }
+}
+
+/// 抽屉容量上限（超出时淘汰最早加入的条目）
+enum MaxItemsPolicy: Int, CaseIterable, Identifiable {
+    case unlimited
+    case m20
+    case m50
+    case m100
+
+    var id: Int { rawValue }
+
+    var label: String {
+        switch self {
+        case .unlimited: return "不限制"
+        case .m20: return "20 条"
+        case .m50: return "50 条"
+        case .m100: return "100 条"
+        }
+    }
+
+    var count: Int? {
+        switch self {
+        case .unlimited: return nil
+        case .m20: return 20
+        case .m50: return 50
+        case .m100: return 100
+        }
+    }
+}
+
 /// 全局热键：键码 + 修饰键（注册走 Carbon RegisterEventHotKey）
 struct HotKeyBinding: Equatable {
     var keyCode: Int
@@ -78,13 +177,14 @@ struct HotKeyBinding: Equatable {
     }
 
     var displayLabel: String {
-        var parts: [String] = []
-        if modifiers.contains(.control) { parts.append("⌃") }
-        if modifiers.contains(.option) { parts.append("⌥") }
-        if modifiers.contains(.shift) { parts.append("⇧") }
-        if modifiers.contains(.command) { parts.append("⌘") }
-        parts.append(Self.string(forKeyCode: keyCode))
-        return parts.joined()
+        var symbol = ""
+        if modifiers.contains(.control) { symbol += "⌃" }
+        if modifiers.contains(.option) { symbol += "⌥" }
+        if modifiers.contains(.shift) { symbol += "⇧" }
+        if modifiers.contains(.command) { symbol += "⌘" }
+        let key = Self.string(forKeyCode: keyCode)
+        // macOS 惯例：单字符键紧贴符号（⌘S），单词键名留空格（⌥ Space）
+        return key.count > 1 ? "\(symbol) \(key)" : symbol + key
     }
 
     /// macOS 虚拟键码 → 显示字符（ANSI 布局）
@@ -130,6 +230,16 @@ final class AppSettings: ObservableObject {
         static let hotKeyCode = prefix + "hotKeyCode"
         static let hotKeyModifiers = prefix + "hotKeyModifiers"
         static let hotKeyLabel = prefix + "hotKeyLabel"
+        static let openOnSingleClick = prefix + "openOnSingleClick"
+        static let collapseAfterDragOut = prefix + "collapseAfterDragOut"
+        static let collapseWhenEmpty = prefix + "collapseWhenEmpty"
+        static let showFileSize = prefix + "showFileSize"
+        static let showAddedTime = prefix + "showAddedTime"
+        static let compactRows = prefix + "compactRows"
+        static let autoClean = prefix + "autoClean"
+        static let maxItems = prefix + "maxItems"
+        static let material = prefix + "material"
+        static let edge = prefix + "edge"
     }
 
     private let defaults: UserDefaults
@@ -193,6 +303,55 @@ final class AppSettings: ObservableObject {
     @Published var panelLevel: DrawerPanelLevel {
         didSet { defaults.set(panelLevel.rawValue, forKey: Keys.panelLevel) }
     }
+    /// 抽屉底色材质
+    @Published var material: DrawerMaterial {
+        didSet { defaults.set(material.rawValue, forKey: Keys.material) }
+    }
+    /// 停靠屏幕边缘（左 / 右）
+    @Published var edge: DrawerEdge {
+        didSet { defaults.set(edge.rawValue, forKey: Keys.edge) }
+    }
+
+    // MARK: 交互
+
+    /// 单击条目直接打开（默认关闭：单击选中、双击打开）
+    @Published var openOnSingleClick: Bool {
+        didSet { defaults.set(openOnSingleClick, forKey: Keys.openOnSingleClick) }
+    }
+    /// 把文件拖出抽屉、拖拽会话结束后自动收起
+    @Published var collapseAfterDragOut: Bool {
+        didSet { defaults.set(collapseAfterDragOut, forKey: Keys.collapseAfterDragOut) }
+    }
+    /// 抽屉被清空后自动收起
+    @Published var collapseWhenEmpty: Bool {
+        didSet { defaults.set(collapseWhenEmpty, forKey: Keys.collapseWhenEmpty) }
+    }
+
+    // MARK: 列表显示
+
+    /// 元信息行显示文件大小
+    @Published var showFileSize: Bool {
+        didSet { defaults.set(showFileSize, forKey: Keys.showFileSize) }
+    }
+    /// 元信息行显示加入时间
+    @Published var showAddedTime: Bool {
+        didSet { defaults.set(showAddedTime, forKey: Keys.showAddedTime) }
+    }
+    /// 紧凑行（更小的瓷片与行距）
+    @Published var compactRows: Bool {
+        didSet { defaults.set(compactRows, forKey: Keys.compactRows) }
+    }
+
+    // MARK: 维护
+
+    /// 过期条目自动清理
+    @Published var autoClean: AutoCleanPolicy {
+        didSet { defaults.set(autoClean.rawValue, forKey: Keys.autoClean) }
+    }
+    /// 容量上限（超出淘汰最早加入）
+    @Published var maxItems: MaxItemsPolicy {
+        didSet { defaults.set(maxItems.rawValue, forKey: Keys.maxItems) }
+    }
 
     // MARK: 快捷键
 
@@ -241,6 +400,16 @@ final class AppSettings: ObservableObject {
         expandOnDragHover = defaults.object(forKey: Keys.expandOnDragHover) as? Bool ?? true
         autoCollapseOnBlur = defaults.object(forKey: Keys.autoCollapseOnBlur) as? Bool ?? false
         panelLevel = DrawerPanelLevel(rawValue: defaults.integer(forKey: Keys.panelLevel)) ?? .floating
+        material = DrawerMaterial(rawValue: defaults.integer(forKey: Keys.material)) ?? .ultraThin
+        edge = DrawerEdge(rawValue: defaults.integer(forKey: Keys.edge)) ?? .right
+        openOnSingleClick = defaults.bool(forKey: Keys.openOnSingleClick)
+        collapseAfterDragOut = defaults.bool(forKey: Keys.collapseAfterDragOut)
+        collapseWhenEmpty = defaults.bool(forKey: Keys.collapseWhenEmpty)
+        showFileSize = defaults.object(forKey: Keys.showFileSize) as? Bool ?? true
+        showAddedTime = defaults.object(forKey: Keys.showAddedTime) as? Bool ?? true
+        compactRows = defaults.bool(forKey: Keys.compactRows)
+        autoClean = AutoCleanPolicy(rawValue: defaults.integer(forKey: Keys.autoClean)) ?? .off
+        maxItems = MaxItemsPolicy(rawValue: defaults.integer(forKey: Keys.maxItems)) ?? .unlimited
         hotKeyEnabled = defaults.bool(forKey: Keys.hotKeyEnabled)
         hotKeyCode = defaults.object(forKey: Keys.hotKeyCode) as? Int ?? 49
         hotKeyModifiers = defaults.object(forKey: Keys.hotKeyModifiers) as? Int
