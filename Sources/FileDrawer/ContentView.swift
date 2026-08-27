@@ -56,6 +56,23 @@ struct ContentView: View {
         }
     }
 
+    /// VoiceOver 主动播报（toast 是临时视觉元素，屏幕阅读器用户可能错过）
+    private func announce(_ text: String) {
+        let anchor: Any
+        if let window = NSApp.mainWindow ?? NSApp.windows.first {
+            anchor = window
+        } else if let app = NSApp as NSApplication? {
+            anchor = app
+        } else {
+            return
+        }
+        NSAccessibility.post(
+            element: anchor,
+            notification: .announcementRequested,
+            userInfo: [NSAccessibility.NotificationUserInfoKey.announcement: text]
+        )
+    }
+
     /// 设置开启「清空后自动收起」且当前分组刚被清空时，滑回收起边条
     private func collapseIfEmptyAfterRemoval() {
         guard settings.collapseWhenEmpty,
@@ -173,6 +190,13 @@ struct ContentView: View {
         }
         .animation(.spring(response: 0.35, dampingFraction: 0.85), value: store.undoSnapshot)
         .animation(.spring(response: 0.35, dampingFraction: 0.85), value: store.notice)
+        // VoiceOver 播报：撤销提示与轻提示出现时朗读文案
+        .onChange(of: store.undoSnapshot) { _, snapshot in
+            if let summary = snapshot?.summary { announce(summary) }
+        }
+        .onChange(of: store.notice) { _, text in
+            if let text { announce(text) }
+        }
         .onAppear { beginEntranceWindow() }
     }
 
@@ -593,6 +617,7 @@ private struct HeaderView: View {
         .menuIndicator(.hidden)
         .fixedSize()
         .help(L10n.t("切换 / 管理分组"))
+        .accessibilityLabel(L10n.t("切换 / 管理分组"))
         .alert(L10n.t("新建分组…"), isPresented: $newDrawerVisible) {
             TextField(L10n.t("分组名"), text: $newDrawerName)
             Button(L10n.t("新建")) {
@@ -648,6 +673,7 @@ private struct HeaderView: View {
             (hovering ? NSCursor.pointingHand : NSCursor.arrow).set()
         }
         .help(L10n.t("排序（仅当前分组）"))
+        .accessibilityLabel(L10n.t("排序（仅当前分组）"))
     }
 }
 
@@ -682,6 +708,8 @@ struct HoverCircleButton: View {
             (hovering ? NSCursor.pointingHand : NSCursor.arrow).set()
         }
         .help(tip)
+        // 图标按钮必须有 VoiceOver 标签，否则读作「按钮」而无语义
+        .accessibilityLabel(tip)
     }
 
     private var iconColor: Color {
@@ -753,6 +781,7 @@ private struct ItemRow: View {
                 }
             }
             .opacity(hovered ? 1 : 0)
+            .accessibilityHidden(!hovered) // 不可见时不可聚焦；等价操作经右键菜单/键盘可达
         }
         .padding(.horizontal, 10)
         .padding(.vertical, settings.compactRows ? 5.5 : 9)
@@ -1392,6 +1421,7 @@ private struct SearchBarView: View {
                 TextField("", text: $interaction.searchText)
                     .textFieldStyle(.plain)
                     .font(.system(size: 12.5))
+                    .accessibilityLabel(L10n.t("搜索名称或 kind:图片"))
             }
 
             if !interaction.searchText.isEmpty {
@@ -1830,6 +1860,7 @@ struct EmptyStateView: View {
                     Image(systemName: isTargeted ? "tray.and.arrow.down.fill" : "tray")
                         .font(.system(size: 24, weight: .light))
                         .foregroundStyle(isTargeted ? DrawerTheme.accent : Color.secondary.opacity(0.75))
+                        .accessibilityHidden(true) // 装饰性；语义由文字承担
                 }
                 .frame(width: 62, height: 62)
                 .scaleEffect(isTargeted ? 1.1 : 1)
