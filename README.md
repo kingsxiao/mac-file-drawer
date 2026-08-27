@@ -247,23 +247,38 @@ defaults 域已有数据时自动备份-恢复（`--isolated`）、结束自清�
 ```
 Sources/FileDrawer/
 ├── main.swift               # AppKit 入口（NSApplication + 自定义生命周期）
-├── AppDelegate.swift        # 抽屉式 NSPanel、键盘路由、主菜单、菜单栏图标、设置应用
-├── AppSettings.swift        # 集中式设置模型（UserDefaults 持久化）
-├── DrawerLayout.swift       # 抽屉几何纯函数（宽度/高度比例/停靠位置）
-├── DrawerTheme.swift        # 设计系统：靛紫身份色 token + 动效预设（Spring）
+├── AppDelegate.swift        # 抽屉式 NSPanel、键盘路由、主菜单、菜单栏图标、设置应用、URL 分发
+├── AppSettings.swift        # 集中式设置模型（UserDefaults 持久化，含语言/多屏/内容搜索开关）
+├── L10n.swift               # 本地化层：中文 key 基准 + 英文表回退（增量迁移安全）
+├── DrawerLayout.swift       # 抽屉几何纯函数（宽度/高度比例/停靠位置/多屏取屏）
+├── DrawerTheme.swift        # 设计系统：靛紫身份色（明暗自适应）+ 动效预设（Spring）
+├── TypeColorContrast.swift  # 瓷片类型色 WCAG 对比度计算与定向调整（含预览样本构建）
 ├── WindowSpringAnimator.swift # 窗口 frame 弹簧物理动画器（数值积分，带过冲回弹）
 ├── HotKeyCenter.swift       # Carbon 全局热键注册
-├── SettingsView.swift       # 设置面板 UI（四组 Tab + 热键录制 + 登录项）
-├── ShelfModel.swift         # 数据模型 / 缩略图管线 / 持久化 Store / 移除撤销快照
+├── SettingsView.swift       # 设置面板 UI（四 Tab + 热键录制 + 登录项 + 分组容量 + 对比度预览）
+├── ShelfPersistence.swift   # 持久化 v3：版本化容器（单 key 原子写）与 v1/v2 迁移
+├── ShelfModel.swift         # 数据模型 / 分组 / 置顶排序 / 缩略图管线 / 撤销快照 / Store
 ├── InboxStore.swift         # 收件箱：文本/链接物化成真实文件（命名/去重/清扫）
-├── ClipboardSupport.swift   # 剪贴板互通（拷贝文件 / 粘贴文件与文本）
-├── InteractionModel.swift   # 选中 / 搜索 / 排序 / 预览等交互状态
-├── FileIconStyle.swift      # 350+ 文件类型的专属图标样式目录
-├── DragSupport.swift        # 拖出 provider 构造 + 拖入载荷解析（文件/文本/链接）
-└── ContentView.swift        # SwiftUI 界面（头部、列表、空态、预览弹层、撤销提示条等）
-Tests/FileDrawerTests/       # 拖拽往返 / 搜索排序 / 设置与热键 / 布局几何 /
-                             # 缩略图管线 / 暂存维护 / 图标目录 / 收件箱物化 /
-                             # 剪贴板互通 / 移除撤销
+├── ClipboardSupport.swift   # 剪贴板互通（拷贝文件 / 粘贴文件与富文本）
+├── InteractionModel.swift   # 选中多选 / kind: 搜索 / 每组排序 / 预览等交互状态
+├── FileIconStyle.swift      # 350+ 文件类型的专属图标样式目录（对比度保障色）
+├── DragSupport.swift        # 拖出 provider 构造 + 拖入载荷解析 + 相对时间本地化
+├── DragOutSupport.swift     # 多选拖出：NSDraggingSession 拖拽源（×N 角标预览）
+├── ReorderDrag.swift        # 行内拖拽排序：自定义 UTType 载荷识别
+├── OpenWithCatalog.swift    # 「打开方式」应用目录（默认应用排最前）
+├── SpotlightContentSearch.swift # 内容搜索：NSMetadataQuery（防抖/超时/转义）
+├── ThumbnailDiskCache.swift # 缩略图磁盘缓存（指纹键 + LRU 淘汰）
+├── DiagnosticsLog.swift     # 轻量诊断日志（内存环形 + os_log 双写 + 导出）
+├── DrawerCommands.swift     # 自动化命令层（URL 与快捷指令共用的九类操作）
+├── URLRouter.swift          # filedrawer:// URL 解析（11 类动作）
+├── DrawerIntents.swift      # App Intents ×9 + App Shortcuts（Siri 短语）
+└── ContentView.swift        # SwiftUI 界面（头部/分组切换/列表/行内拖拽/预览/空态/toast）
+Sources/FileDrawer/Resources/{zh-Hans,en}.lproj/
+                             # 本地化表（英文值；中文 key 即原文）
+Tests/FileDrawerTests/       # 189 个测试：拖拽往返 / 多选 / 分组与置顶 / 每组排序 /
+                             # 失效检测 / 重命名 / 导出 / 缓存 / 搜索语法 / 持久化 v3 /
+                             # URL 与 Intents 自动化 / 对比度 / 本地化 / 性能基线 / …
+scripts/smoke_automation.sh  # 自动化端到端冒烟（make smoke-automation）
 make_app.sh / install.sh / uninstall.sh / make_dmg.sh / Makefile
                              # 构建 / 一键安装 / 卸载 / DMG 分发（make app|install|uninstall|dmg）
 ```
