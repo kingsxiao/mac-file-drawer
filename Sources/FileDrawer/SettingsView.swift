@@ -128,8 +128,8 @@ private struct GeneralSettingsTab: View {
                 Text("超出上限时淘汰最早加入的条目；置顶条目不受过期清理与容量淘汰影响。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                LabeledContent("当前条目") {
-                    Text("\(store.items.count) 个\(inventorySuffix)")
+                LabeledContent("当前分组条目") {
+                    Text("\(store.currentItems.count) 个\(inventorySuffix)")
                         .foregroundStyle(.secondary)
                 }
                 Button(store.missingIDs.isEmpty
@@ -148,12 +148,15 @@ private struct GeneralSettingsTab: View {
         }
     }
 
-    /// 条目统计后缀：置顶 N · 失效 M（都为零时为空）
+    /// 条目统计后缀：置顶 N · 失效 M · 共 K 组（都为零时为空）
     private var inventorySuffix: String {
+        let current = store.currentItems
         var parts: [String] = []
-        let pinned = store.items.filter(\.pinned).count
+        let pinned = current.filter(\.pinned).count
         if pinned > 0 { parts.append("置顶 \(pinned)") }
-        if !store.missingIDs.isEmpty { parts.append("失效 \(store.missingIDs.count)") }
+        let missing = current.filter { store.missingIDs.contains($0.id) }.count
+        if missing > 0 { parts.append("失效 \(missing)") }
+        if store.drawers.count > 1 { parts.append("共 \(store.drawers.count) 组") }
         return parts.isEmpty ? "" : "（\(parts.joined(separator: " · "))）"
     }
 

@@ -13,6 +13,8 @@ struct ShelfItem: Identifiable, Codable, Equatable {
     var addedAt: Date
     /// 置顶：排序时浮到最前，且免于过期清理与容量淘汰
     var pinned: Bool
+    /// 所属分组（多抽屉）；旧数据迁移时统一归入默认分组，正常运行期不为 nil
+    var drawerID: UUID?
     /// 类型识别（含一次磁盘 stat）在构造时算好存起来；
     /// 渲染路径每次 body 都会读它，现场重算会让悬停/滚动每帧都打 I/O。
     /// 文件被原地替换成别的类型属罕见场景，不值得为此每帧重识别。
@@ -23,27 +25,29 @@ struct ShelfItem: Identifiable, Codable, Equatable {
     }
 
     /// 测试与工具场景：可注入确定的时间
-    init(url: URL, addedAt: Date, pinned: Bool = false) {
+    init(url: URL, addedAt: Date = Date(), pinned: Bool = false, drawerID: UUID? = nil) {
         self.id = UUID()
         self.path = url.standardizedFileURL.path
         self.addedAt = addedAt
         self.pinned = pinned
+        self.drawerID = drawerID
         self.kind = FileKind(url: url)
     }
 
     var url: URL { URL(fileURLWithPath: path) }
     var name: String { url.lastPathComponent }
 
-    // 持久化格式只含 id/path/addedAt/pinned；kind 由 path 反推，避免冗余与失同步
-    private enum CodingKeys: String, CodingKey { case id, path, addedAt, pinned }
+    // 持久化格式只含 id/path/addedAt/pinned/drawerID；kind 由 path 反推，避免冗余与失同步
+    private enum CodingKeys: String, CodingKey { case id, path, addedAt, pinned, drawerID }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.id = try container.decode(UUID.self, forKey: .id)
         self.path = try container.decode(String.self, forKey: .path)
         self.addedAt = try container.decode(Date.self, forKey: .addedAt)
-        // 旧版本持久化里没有 pinned：默认未置顶
+        // 旧版本持久化里没有 pinned / drawerID：默认未置顶、归属默认分组（由 Store 归一化）
         self.pinned = try container.decodeIfPresent(Bool.self, forKey: .pinned) ?? false
+        self.drawerID = try container.decodeIfPresent(UUID.self, forKey: .drawerID)
         self.kind = FileKind(url: URL(fileURLWithPath: path))
     }
 
@@ -53,6 +57,7 @@ struct ShelfItem: Identifiable, Codable, Equatable {
         try container.encode(path, forKey: .path)
         try container.encode(addedAt, forKey: .addedAt)
         try container.encode(pinned, forKey: .pinned)
+        try container.encodeIfPresent(drawerID, forKey: .drawerID)
     }
 }
 
@@ -75,18 +80,44 @@ struct RemovalSnapshot: Equatable {
     }
 }
 
+// MARK: - 分组（多抽屉）：条目按组划分，抽屉一次展示一组
+
+struct DrawerGroup: Identifiable, Codable, Equatable {
+    let id: UUID
+    var name: String
+    var createdAt: Date
+
+    init(id: UUID = UUID(), name: String, createdAt: Date = Date()) {
+        self.id = id
+        self.name = name
+        self.createdAt = createdAt
+    }
+}
+
 // MARK: - Store
 
 @MainActor
 final class ShelfStore: ObservableObject {
     static let shared = ShelfStore()
     private static let defaultsKey = "com.wangxiao.filedrawer.items"
+    private static let drawersKey = "com.wangxiao.filedrawer.drawers"
+    private static let currentDrawerKey = "com.wangxiao.filedrawer.currentDrawer"
+    /// 旧数据迁移 / 全新安装时的默认分组名
+    static let defaultDrawerName = "默认"
 
     @Published var items: [ShelfItem] = [] {
         didSet {
             persist()
             refreshMissingStatus()
         }
+    }
+    /// 全部分组（至少一个；顺序即切换菜单顺序）
+    @Published private(set) var drawers: [DrawerGroup] = [] {
+        didSet { persistDrawers() }
+    }
+    /// 当前展示的分组（init 里立即替换为真实值）
+    @Published private(set) var currentDrawerID: UUID = UUID() {
+        didSet { persistDrawers() }
     }
 
     /// 缩略图缓存（图片/视频真实预览）
@@ -122,6 +153,23 @@ final class ShelfStore: ObservableObject {
     }
 
     private init() {
+        // 分组：读取旧值或全新创建；至少保证一个分组存在。
+        // （init 内赋值不触发 didSet，末尾显式 persistDrawers）
+        if let data = UserDefaults.standard.data(forKey: Self.drawersKey),
+           let decoded = try? JSONDecoder().decode([DrawerGroup].self, from: data),
+           !decoded.isEmpty {
+            drawers = decoded
+        } else {
+            drawers = [DrawerGroup(name: Self.defaultDrawerName)]
+        }
+        if let raw = UserDefaults.standard.string(forKey: Self.currentDrawerKey),
+           let id = UUID(uuidString: raw),
+           drawers.contains(where: { $0.id == id }) {
+            currentDrawerID = id
+        } else {
+            currentDrawerID = drawers[0].id
+        }
+
         if let data = UserDefaults.standard.data(forKey: Self.defaultsKey),
            let saved = try? JSONDecoder().decode([ShelfItem].self, from: data) {
             var restored = saved
@@ -132,6 +180,11 @@ final class ShelfStore: ObservableObject {
             }
             restored = Self.pruned(restored, policy: settings.autoClean)
             restored = Self.trimmed(restored, limit: settings.maxItems)
+            // 旧版本条目没有 drawerID：归入第一个分组（通常是迁移出的「默认」）
+            let fallbackDrawer = drawers[0].id
+            for index in restored.indices where restored[index].drawerID == nil {
+                restored[index].drawerID = fallbackDrawer
+            }
             items = restored
         }
         // dropFirst：跳过订阅时的当前值，只在「从关到开」时补齐
@@ -161,6 +214,8 @@ final class ShelfStore: ObservableObject {
         if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil {
             settleInbox()
         }
+        // init 内赋值不触发 didSet：分组结构落盘一次
+        persistDrawers()
         // init 内赋值不触发 didSet：启动时手动扫一遍存在性
         refreshMissingStatus()
     }
@@ -186,7 +241,7 @@ final class ShelfStore: ObservableObject {
             // 与已有条目、以及同批次内的重复项一并不重复入列
             guard !known.contains(path) else { continue }
             known.insert(path)
-            newItems.append(ShelfItem(url: url))
+            newItems.append(ShelfItem(url: url, drawerID: currentDrawerID))
         }
         let skipped = urls.count - newItems.count
         guard !newItems.isEmpty else { return (0, skipped) }
@@ -348,6 +403,116 @@ final class ShelfStore: ObservableObject {
         withAnimation(DrawerMotion.smooth) { items = next }
     }
 
+    // MARK: 分组（多抽屉）
+
+    /// 分组结构 + 当前分组持久化
+    private func persistDrawers() {
+        if let data = try? JSONEncoder().encode(drawers) {
+            UserDefaults.standard.set(data, forKey: Self.drawersKey)
+        }
+        UserDefaults.standard.set(currentDrawerID.uuidString, forKey: Self.currentDrawerKey)
+    }
+
+    /// 条目按归一化规则解析所属分组：nil（异常/未迁移）视为第一个分组
+    private func resolvedDrawerID(of item: ShelfItem) -> UUID {
+        if let id = item.drawerID, drawers.contains(where: { $0.id == id }) { return id }
+        return drawers.first?.id ?? currentDrawerID
+    }
+
+    var currentDrawer: DrawerGroup? {
+        drawers.first { $0.id == currentDrawerID } ?? drawers.first
+    }
+
+    var currentDrawerName: String {
+        currentDrawer?.name ?? Self.defaultDrawerName
+    }
+
+    /// 当前分组的条目（保持 items 顺序）
+    var currentItems: [ShelfItem] {
+        items(in: currentDrawerID)
+    }
+
+    /// 指定分组的条目
+    func items(in drawerID: UUID) -> [ShelfItem] {
+        items.filter { resolvedDrawerID(of: $0) == drawerID }
+    }
+
+    /// 指定分组的条数
+    func itemCount(in drawerID: UUID) -> Int {
+        items.reduce(0) { count, item in
+            count + (resolvedDrawerID(of: item) == drawerID ? 1 : 0)
+        }
+    }
+
+    /// 切换当前分组
+    func switchDrawer(to id: UUID) {
+        guard drawers.contains(where: { $0.id == id }) else { return }
+        currentDrawerID = id
+    }
+
+    /// 新建分组并切换过去；空名 / 重名返回 nil。名字限长 24。
+    @discardableResult
+    func createDrawer(named rawName: String) -> UUID? {
+        let name = String(rawName.trimmingCharacters(in: .whitespacesAndNewlines).prefix(24))
+        guard !name.isEmpty, !drawers.contains(where: { $0.name == name }) else { return nil }
+        let group = DrawerGroup(name: name)
+        drawers.append(group)
+        currentDrawerID = group.id
+        return group.id
+    }
+
+    /// 重命名分组；空名 / 与其他分组重名忽略
+    func renameDrawer(id: UUID, to rawName: String) {
+        let name = String(rawName.trimmingCharacters(in: .whitespacesAndNewlines).prefix(24))
+        guard !name.isEmpty,
+              !drawers.contains(where: { $0.name == name && $0.id != id }),
+              let index = drawers.firstIndex(where: { $0.id == id }) else { return }
+        drawers[index].name = name
+    }
+
+    /// 删除分组：其条目整体移到剩余的第一个分组；最后一个分组不可删。
+    /// 删的是当前分组时切到条目去向分组。
+    @discardableResult
+    func deleteDrawer(id: UUID) -> Bool {
+        guard drawers.count > 1,
+              let index = drawers.firstIndex(where: { $0.id == id }) else { return false }
+        drawers.remove(at: index)
+        let survivor = drawers[0].id
+        withAnimation(DrawerMotion.smooth) {
+            for itemIndex in items.indices where resolvedDrawerID(of: items[itemIndex]) == id {
+                items[itemIndex].drawerID = survivor
+            }
+        }
+        if currentDrawerID == id { currentDrawerID = survivor }
+        return true
+    }
+
+    /// 条目整批移到另一分组（右键「移动到分组」）
+    func moveItems(ids: [UUID], to drawerID: UUID) {
+        guard drawers.contains(where: { $0.id == drawerID }) else { return }
+        let set = Set(ids)
+        guard items.contains(where: { set.contains($0.id) && resolvedDrawerID(of: $0) != drawerID }) else { return }
+        withAnimation(DrawerMotion.smooth) {
+            for index in items.indices where set.contains(items[index].id) {
+                items[index].drawerID = drawerID
+            }
+        }
+    }
+
+    /// 把指向不存在分组的条目收拢到当前分组（还原快照等路径的兜底）
+    private func normalizeOrphanDrawerIDs() {
+        let valid = Set(drawers.map(\.id))
+        guard items.contains(where: { item in
+            guard let id = item.drawerID else { return false }
+            return !valid.contains(id)
+        }) else { return }
+        for index in items.indices {
+            if let id = items[index].drawerID, !valid.contains(id) {
+                items[index].drawerID = currentDrawerID
+            }
+        }
+    }
+
     // MARK: 维护策略（纯函数，可单测）
 
     /// 过期自动清理：丢弃加入时间早于策略窗口的条目；置顶条目豁免
@@ -450,16 +615,19 @@ final class ShelfStore: ObservableObject {
         }
     }
 
+    /// 清空当前分组的条目（菜单「清空」作用域 = 正在看的分组）
     func clear() {
-        guard !items.isEmpty else { return }
-        recordRemoval(entries: items.map(initRemovalEntry), summary: "已清空抽屉（\(items.count) 个条目）")
+        let targets = currentItems
+        guard !targets.isEmpty else { return }
+        recordRemoval(entries: targets.map(initRemovalEntry), summary: "已清空「\(currentDrawerName)」（\(targets.count) 个条目）")
         withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
-            items.removeAll()
+            let ids = Set(targets.map(\.id))
+            items.removeAll { ids.contains($0.id) }
         }
-        thumbs.removeAll()
-        thumbFailed.removeAll()
-        thumbInFlight.removeAll()
-        sizeTextCache.removeAll()
+        releaseAuxState(
+            ids: Set(targets.map(\.id)),
+            paths: Set(targets.map(\.path))
+        )
     }
 
     // MARK: 撤销
@@ -482,7 +650,8 @@ final class ShelfStore: ObservableObject {
         RemovalSnapshot.Entry(item: item, index: items.firstIndex(where: { $0.id == item.id }) ?? items.count)
     }
 
-    /// 还原最近一次移除：按原位置插回，返回还原条数
+    /// 还原最近一次移除：按原位置插回，返回还原条数。
+    /// 若还原条目的分组已被删除，收拢到当前分组。
     @discardableResult
     func undoLastRemoval() -> Int {
         guard let snapshot = undoSnapshot else { return 0 }
@@ -496,6 +665,7 @@ final class ShelfStore: ObservableObject {
             items = next
             return snapshot.entries.count
         }
+        normalizeOrphanDrawerIDs()
         settleInbox()
         return restored
     }

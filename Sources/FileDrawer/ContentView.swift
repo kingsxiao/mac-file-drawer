@@ -17,9 +17,9 @@ struct ContentView: View {
     @State private var entranceGeneration = 0
     @FocusState private var searchFocused: Bool
 
-    /// 当前应展示的条目（过滤 + 排序后）
+    /// 当前应展示的条目（当前分组 + 过滤 + 排序后）
     private var displayedItems: [ShelfItem] {
-        interaction.displayItems(from: store.items)
+        interaction.displayItems(from: store.currentItems)
     }
 
     var body: some View {
@@ -49,15 +49,20 @@ struct ContentView: View {
             interaction.reconcileAfterListChange(with: displayedItems)
             collapseIfEmptyAfterRemoval()
         }
+        // 切换分组：选中 / 预览随新分组的可见性收回，条目重新错峰入场
+        .onChange(of: store.currentDrawerID) {
+            interaction.reconcileAfterListChange(with: displayedItems)
+            beginEntranceWindow()
+        }
     }
 
-    /// 设置开启「清空后自动收起」且抽屉刚被清空时，滑回收起边条
+    /// 设置开启「清空后自动收起」且当前分组刚被清空时，滑回收起边条
     private func collapseIfEmptyAfterRemoval() {
         guard settings.collapseWhenEmpty,
-              store.items.isEmpty,
+              store.currentItems.isEmpty,
               !interaction.isCollapsed else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-            guard store.items.isEmpty, !interaction.isCollapsed else { return }
+            guard store.currentItems.isEmpty, !interaction.isCollapsed else { return }
             NotificationCenter.default.post(name: .toggleDrawer, object: nil)
         }
     }
@@ -392,6 +397,11 @@ private struct HeaderView: View {
     @ObservedObject var store: ShelfStore
     @ObservedObject var interaction: InteractionModel
     @State private var sortHovered = false
+    // 分组管理弹窗
+    @State private var newDrawerVisible = false
+    @State private var newDrawerName = ""
+    @State private var renameDrawerVisible = false
+    @State private var renameDrawerName = ""
 
     var body: some View {
         HStack(spacing: 7) {
@@ -408,13 +418,10 @@ private struct HeaderView: View {
                         .strokeBorder(Color.primary.opacity(0.15), lineWidth: 0.8)
                 )
 
-            Text("文件抽屉")
-                .font(.system(size: 14, weight: .semibold))
-                .kerning(0.2)
-                .lineLimit(1)
+            drawerMenu
 
-            if !store.items.isEmpty {
-                Text("\(store.items.count)")
+            if !store.currentItems.isEmpty {
+                Text("\(store.currentItems.count)")
                     .font(.system(size: 10, weight: .semibold, design: .monospaced))
                     .monospacedDigit()
                     .contentTransition(.numericText())
@@ -470,6 +477,74 @@ private struct HeaderView: View {
         .padding(.vertical, 11)
         .animation(DrawerMotion.bouncy, value: store.items.count)
         .animation(DrawerMotion.bouncy, value: interaction.selectedIDs.count)
+        .animation(DrawerMotion.bouncy, value: store.currentDrawerID)
+    }
+
+    /// 分组切换器：当前分组名 + 下拉菜单（切换 / 新建 / 重命名 / 删除）
+    private var drawerMenu: some View {
+        Menu {
+            ForEach(store.drawers) { group in
+                let count = store.itemCount(in: group.id)
+                Button {
+                    withAnimation(DrawerMotion.smooth) { store.switchDrawer(to: group.id) }
+                } label: {
+                    if group.id == store.currentDrawerID {
+                        Label("\(group.name)（\(count)）", systemImage: "checkmark")
+                    } else {
+                        Text("\(group.name)（\(count)）")
+                    }
+                }
+            }
+            Divider()
+            Button("新建分组…") {
+                newDrawerName = ""
+                newDrawerVisible = true
+            }
+            Button("重命名分组…") {
+                renameDrawerName = store.currentDrawerName
+                renameDrawerVisible = true
+            }
+            Button("删除分组", role: .destructive) {
+                // 删除当前分组：条目移到剩余第一个分组（最后一个不可删，按钮已禁用）
+                if !store.deleteDrawer(id: store.currentDrawerID) {
+                    NSSound.beep()
+                }
+            }
+            .disabled(store.drawers.count <= 1)
+        } label: {
+            HStack(spacing: 3) {
+                Text(store.currentDrawerName)
+                    .font(.system(size: 14, weight: .semibold))
+                    .kerning(0.2)
+                    .lineLimit(1)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 8, weight: .bold))
+                    .foregroundStyle(.tertiary)
+            }
+            .contentShape(Rectangle())
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("切换 / 管理分组")
+        .alert("新建分组", isPresented: $newDrawerVisible) {
+            TextField("分组名", text: $newDrawerName)
+            Button("新建") {
+                if store.createDrawer(named: newDrawerName) == nil { NSSound.beep() }
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("新建后自动切换过去；拖入 / 粘贴的文件会放进当前分组。")
+        }
+        .alert("重命名「\(store.currentDrawerName)」", isPresented: $renameDrawerVisible) {
+            TextField("分组名", text: $renameDrawerName)
+            Button("重命名") {
+                store.renameDrawer(id: store.currentDrawerID, to: renameDrawerName)
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("与其他分组重名会被忽略。")
+        }
     }
 
     private var sortMenu: some View {
@@ -703,7 +778,7 @@ private struct ItemRow: View {
                 } else if flags.contains(.shift) {
                     interaction.extendSelection(
                         to: item,
-                        within: interaction.displayItems(from: store.items)
+                        within: interaction.displayItems(from: store.currentItems)
                     )
                 } else {
                     interaction.select(item)
@@ -816,11 +891,11 @@ private struct ItemRow: View {
         NSWorkspace.shared.open(item.url)
     }
 
-    /// 右键菜单操作目标：行在多选集合里 → 整个集合（访达语义）
+    /// 右键菜单操作目标：行在多选集合里 → 整个集合（访达语义）；范围限当前分组
     private var menuTargets: [ShelfItem] {
         interaction.selectionTargets(
             containing: item,
-            in: interaction.displayItems(from: store.items)
+            in: interaction.displayItems(from: store.currentItems)
         )
     }
 
@@ -853,6 +928,15 @@ private struct ItemRow: View {
             Button("上移") { reorderTargets(targets, nudge: -1) }
             Button("下移") { reorderTargets(targets, nudge: 1) }
             Button("移到最后") { reorderTargets(targets, sendToFront: false) }
+        }
+        if store.drawers.count > 1 {
+            Menu("移动到分组\(countSuffix(targets))") {
+                ForEach(store.drawers.filter { $0.id != store.currentDrawerID }) { group in
+                    Button("\(group.name)（\(store.itemCount(in: group.id))）") {
+                        store.moveItems(ids: targets.map(\.id), to: group.id)
+                    }
+                }
+            }
         }
         Divider()
         Button("拷贝文件\(countSuffix(targets))") { ClipboardSupport.copyFiles(targets) }
@@ -1033,7 +1117,7 @@ private struct ItemRow: View {
         // 行内 ✕ 与右键菜单同语义：行在多选集合里 → 整批移除（可整批还原）
         removeTargets(interaction.selectionTargets(
             containing: item,
-            in: interaction.displayItems(from: store.items)
+            in: interaction.displayItems(from: store.currentItems)
         ))
     }
 
@@ -1111,13 +1195,13 @@ private struct CollapsedTabView: View {
                     .frame(width: hovered ? 13 : 7, height: 2)
                     .opacity(hovered ? 1 : 0.4)
 
-                if !store.items.isEmpty {
-                    Text("\(store.items.count)")
+                if !store.currentItems.isEmpty {
+                    Text("\(store.currentItems.count)")
                         .font(.system(size: 10, weight: .semibold, design: .monospaced))
                         .monospacedDigit()
                         .contentTransition(.numericText())
                         .foregroundStyle(.secondary)
-                        .animation(DrawerMotion.bouncy, value: store.items.count)
+                        .animation(DrawerMotion.bouncy, value: store.currentItems.count)
                 }
             }
         }

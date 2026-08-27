@@ -97,7 +97,7 @@ final class RemovalUndoTests: XCTestCase {
         store.clear()
         XCTAssertTrue(store.items.isEmpty)
         XCTAssertEqual(store.undoSnapshot?.entries.count, 2)
-        XCTAssertTrue(store.undoSnapshot?.summary.contains("已清空抽屉（2 个条目）") ?? false)
+        XCTAssertTrue(store.undoSnapshot?.summary.contains("已清空「\(store.currentDrawerName)」（2 个条目）") ?? false)
 
         // 空抽屉再次清空：不产生新快照
         store.clear()

@@ -42,7 +42,8 @@ final class KeyboardRouter {
         // 正在往搜索框里打字时完全放行（field editor 在响应链最前）
         if panel.firstResponder is NSTextView { return event }
 
-        let displayed = model.displayItems(from: store.items)
+        // 键盘操作的作用域 = 当前分组的展示条目
+        let displayed = model.displayItems(from: store.currentItems)
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
 
         // Cmd+F 聚焦/显示搜索框
@@ -402,8 +403,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(withTitle: "显示 / 隐藏抽屉", action: #selector(toggleAction), keyEquivalent: "")
         menu.addItem(.separator())
         menu.addItem(withTitle: "导入文件…", action: #selector(importAction), keyEquivalent: "")
-        menu.addItem(withTitle: "导出全部到文件夹…", action: #selector(exportAllAction), keyEquivalent: "")
-        menu.addItem(withTitle: "清空抽屉", action: #selector(clearAction), keyEquivalent: "")
+        menu.addItem(withTitle: "导出当前分组到文件夹…", action: #selector(exportAllAction), keyEquivalent: "")
+        menu.addItem(withTitle: "清空当前分组", action: #selector(clearAction), keyEquivalent: "")
 
         // 最近条目：按加入时间倒序取前 6 个，点击直接打开
         let recents = Array(
@@ -444,7 +445,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appMenu.addItem(.separator())
         // 头部空间有限，导入 / 清空收进菜单（拖拽仍是放入文件的主方式）
         appMenu.addItem(withTitle: "导入文件…", action: #selector(importAction), keyEquivalent: "o")
-        appMenu.addItem(withTitle: "清空抽屉", action: #selector(clearAction), keyEquivalent: "")
+        appMenu.addItem(withTitle: "清空当前分组", action: #selector(clearAction), keyEquivalent: "")
         appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "隐藏文件抽屉", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         let hideOthers = appMenu.addItem(
@@ -552,11 +553,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         dlg.canCreateDirectories = true
         dlg.allowsMultipleSelection = false
         dlg.prompt = "导出到这里"
-        dlg.message = "把抽屉里的 \(store.items.count) 个条目拷贝到所选文件夹"
+        dlg.message = "把「\(store.currentDrawerName)」分组的 \(store.currentItems.count) 个条目拷贝到所选文件夹"
         guard dlg.runModal() == .OK, let folder = dlg.url else { return }
 
         // 大文件拷贝放后台，避免冻结主线程（弹簧动画 / 热键 / 菜单）
-        let snapshot = store.items.map(\.path)
+        let snapshot = store.currentItems.map(\.path)
         Task.detached(priority: .userInitiated) {
             let result = ShelfStore.exportPaths(snapshot, to: folder)
             await MainActor.run {
