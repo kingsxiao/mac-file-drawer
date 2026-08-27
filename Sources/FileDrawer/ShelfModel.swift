@@ -221,7 +221,7 @@ final class ShelfStore: ObservableObject {
         }
     }
 
-    /// 「移动到文件夹」后把条目改写为指向新路径（类型随新路径重新识别）
+    /// 「移动到文件夹」/ 重命名后把条目改写为指向新路径（类型随新路径重新识别）
     func updatePath(id: UUID, to url: URL) {
         guard let index = items.firstIndex(where: { $0.id == id }) else { return }
         let oldPath = items[index].path
@@ -231,6 +231,9 @@ final class ShelfStore: ObservableObject {
         thumbFailed.remove(id)
         thumbInFlight.remove(id)
         sizeTextCache.removeValue(forKey: oldPath)
+        // 行的 SwiftUI 身份没变（id 相同），onAppear 不会重触发：
+        // 这里主动补齐新路径的缩略图，否则瓷片会一直退回类型符号
+        ensureThumb(for: items[index])
     }
 
     /// 重命名条目文件（同目录改名；目标名已存在时自动追加 " 2" 序号）。
@@ -242,7 +245,14 @@ final class ShelfStore: ObservableObject {
         guard let newName = InboxStore.sanitize(rawName, maxLength: 120), !newName.isEmpty else { return false }
         guard newName != item.name else { return true }
         let directory = item.url.deletingLastPathComponent()
-        let destination = InboxStore.uniqueSiblingURL(fileName: newName, directory: directory)
+        // 仅大小写变化：fileExists 在大小写不敏感文件系统上会命中自己，
+        // 走去重会把「改大小写」误变出 " 2" 后缀——直接改名即可
+        let destination: URL
+        if newName.compare(item.name, options: [.caseInsensitive]) == .orderedSame {
+            destination = directory.appendingPathComponent(newName)
+        } else {
+            destination = InboxStore.uniqueSiblingURL(fileName: newName, directory: directory)
+        }
         guard destination != item.url else { return true }
         do {
             try FileManager.default.moveItem(at: item.url, to: destination)
@@ -257,17 +267,29 @@ final class ShelfStore: ObservableObject {
     /// 返回 (成功数, 失败数, 跳过数)：失效条目跳过。
     @discardableResult
     func exportAll(to folder: URL) -> (exported: Int, failed: Int, skipped: Int) {
+        Self.exportPaths(items.map(\.path), to: folder)
+    }
+
+    /// 后台拷贝一批路径到目标文件夹（主线程调用会卡 UI，大文件务必走 detached 任务）
+    nonisolated static func exportPaths(
+        _ paths: [String],
+        to folder: URL
+    ) -> (exported: Int, failed: Int, skipped: Int) {
         var exported = 0
         var failed = 0
         var skipped = 0
-        for item in items {
-            guard FileManager.default.fileExists(atPath: item.path) else {
+        for path in paths {
+            let source = URL(fileURLWithPath: path)
+            guard FileManager.default.fileExists(atPath: path) else {
                 skipped += 1
                 continue
             }
-            let destination = InboxStore.uniqueSiblingURL(fileName: item.name, directory: folder)
+            let destination = InboxStore.uniqueSiblingURL(
+                fileName: source.lastPathComponent,
+                directory: folder
+            )
             do {
-                try FileManager.default.copyItem(at: item.url, to: destination)
+                try FileManager.default.copyItem(at: source, to: destination)
                 exported += 1
             } catch {
                 failed += 1

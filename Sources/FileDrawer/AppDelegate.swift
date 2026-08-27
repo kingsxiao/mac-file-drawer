@@ -244,6 +244,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // 收起状态变化 → 窗口边框在「抽屉」与「窄边条」之间动画
         InteractionModel.shared.onCollapseChange = { [weak self] collapsed in
             guard let self, self.panel != nil else { return }
+            // 任何路径（边条点击 / 拖放悬停 / 热键）展开都汇到这里：
+            // 同步 isOpen，否则后续 targetFrame 会把窗口定位到屏幕外
+            if !collapsed { self.isOpen = true }
             let screen = DrawerLayout.targetScreen(followMouse: settings.followMouseScreen) ?? NSScreen.screens[0]
             let target = collapsed
                 ? DrawerLayout.collapsedFrame(visibleFrame: screen.visibleFrame, settings: self.settings)
@@ -552,15 +555,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         dlg.message = "把抽屉里的 \(store.items.count) 个条目拷贝到所选文件夹"
         guard dlg.runModal() == .OK, let folder = dlg.url else { return }
 
-        let result = store.exportAll(to: folder)
-        let alert = NSAlert()
-        alert.alertStyle = result.failed > 0 ? .warning : .informational
-        alert.messageText = "已导出 \(result.exported) 个条目"
-        var details = [String]()
-        if result.skipped > 0 { details.append("\(result.skipped) 个失效条目已跳过") }
-        if result.failed > 0 { details.append("\(result.failed) 个拷贝失败") }
-        alert.informativeText = details.joined(separator: "，")
-        alert.runModal()
+        // 大文件拷贝放后台，避免冻结主线程（弹簧动画 / 热键 / 菜单）
+        let snapshot = store.items.map(\.path)
+        Task.detached(priority: .userInitiated) {
+            let result = ShelfStore.exportPaths(snapshot, to: folder)
+            await MainActor.run {
+                let alert = NSAlert()
+                alert.alertStyle = result.failed > 0 ? .warning : .informational
+                alert.messageText = "已导出 \(result.exported) 个条目"
+                var details = [String]()
+                if result.skipped > 0 { details.append("\(result.skipped) 个失效条目已跳过") }
+                if result.failed > 0 { details.append("\(result.failed) 个拷贝失败") }
+                alert.informativeText = details.joined(separator: "，")
+                alert.runModal()
+            }
+        }
     }
 
     @objc private func quitAction() {

@@ -98,4 +98,28 @@ final class RenameTests: XCTestCase {
             XCTAssertEqual(store.items[0].kind.variant, .image, "类型应随新扩展名重新识别")
         }
     }
+
+    /// 仅改大小写：不追加 " 2" 后缀（大小写不敏感文件系统上 fileExists 会命中自己）
+    func testRenameCaseOnlyChangeHasNoSuffix() throws {
+        try MainActor.assumeIsolated {
+            let dir = FileManager.default.temporaryDirectory
+                .appendingPathComponent(UUID().uuidString, isDirectory: true)
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            defer { try? FileManager.default.removeItem(at: dir) }
+
+            let store = ShelfStore.shared
+            let original = store.items
+            let url = dir.appendingPathComponent("Photo.jpg")
+            try Data("x".utf8).write(to: url)
+            store.items = [ShelfItem(url: url)]
+            defer { store.items = original }
+
+            XCTAssertTrue(store.rename(id: store.items[0].id, to: "photo.jpg"))
+            XCTAssertEqual(store.items[0].name, "photo.jpg", "仅大小写变化应原地改名，不产生副本序号")
+            XCTAssertFalse(
+                FileManager.default.fileExists(atPath: dir.appendingPathComponent("photo 2.jpg").path),
+                "不应出现带序号的副本"
+            )
+        }
+    }
 }
