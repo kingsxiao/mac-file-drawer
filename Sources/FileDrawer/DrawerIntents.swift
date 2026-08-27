@@ -28,9 +28,19 @@ struct AddFilesToDrawerIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<Int> {
-        let paths = files.compactMap(\.fileURL).map(\.path)
-        let result = DrawerCommands.add(paths: paths, group: group)
-        return .result(value: result.added)
+        .result(value: Self.run(files: files, group: group))
+    }
+
+    /// 拼装层（perform 委托；IntentFile → 路径的转换在此）
+    @MainActor
+    static func run(files: [IntentFile], group: String?) -> Int {
+        run(paths: files.compactMap(\.fileURL).map(\.path), group: group)
+    }
+
+    /// 纯路径拼装层（单测直呼：IntentFile 的 fileURL 依赖 app 上下文，xctest 进程恒为 nil）
+    @MainActor
+    static func run(paths: [String], group: String?) -> Int {
+        DrawerCommands.add(paths: paths, group: group).added
     }
 }
 
@@ -52,8 +62,13 @@ struct ListDrawerItemsIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<[IntentFile]> {
-        let urls = DrawerCommands.list(group: group, limit: limit)
-        return .result(value: urls.map { IntentFile(fileURL: $0) })
+        .result(value: Self.run(group: group, limit: limit).map { IntentFile(fileURL: $0) })
+    }
+
+    /// 拼装层（返回 URL 列表；IntentFile 封装留在 perform）
+    @MainActor
+    static func run(group: String?, limit: Int) -> [URL] {
+        DrawerCommands.list(group: group, limit: limit)
     }
 }
 
@@ -82,12 +97,18 @@ struct SetDrawerExpansionIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult {
+        Self.run(command: command)
+        return .result()
+    }
+
+    /// 拼装层
+    @MainActor
+    static func run(command: DrawerExpansionCommand) {
         switch command {
         case .toggle: DrawerCommands.setExpansion(expand: nil)
         case .expand: DrawerCommands.setExpansion(expand: true)
         case .collapse: DrawerCommands.setExpansion(expand: false)
         }
-        return .result()
     }
 }
 
@@ -106,7 +127,13 @@ struct RemoveDrawerItemsIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<Int> {
-        .result(value: DrawerCommands.removeItems(group: group, limit: limit))
+        .result(value: Self.run(group: group, limit: limit))
+    }
+
+    /// 拼装层
+    @MainActor
+    static func run(group: String?, limit: Int) -> Int {
+        DrawerCommands.removeItems(group: group, limit: limit)
     }
 }
 
@@ -119,7 +146,13 @@ struct ClearDrawerGroupIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<Int> {
-        .result(value: DrawerCommands.clearGroup(group))
+        .result(value: Self.run(group: group))
+    }
+
+    /// 拼装层
+    @MainActor
+    static func run(group: String?) -> Int {
+        DrawerCommands.clearGroup(group)
     }
 }
 
@@ -141,7 +174,13 @@ struct PinDrawerItemsIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<Int> {
-        .result(value: DrawerCommands.setPinned(group: group, limit: limit, pinned: pin))
+        .result(value: Self.run(group: group, limit: limit, pin: pin))
+    }
+
+    /// 拼装层
+    @MainActor
+    static func run(group: String?, limit: Int, pin: Bool) -> Int {
+        DrawerCommands.setPinned(group: group, limit: limit, pinned: pin)
     }
 }
 
@@ -157,7 +196,13 @@ struct SendToFrontIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<Int> {
-        .result(value: DrawerCommands.sendToFront(group: group, limit: limit))
+        .result(value: Self.run(group: group, limit: limit))
+    }
+
+    /// 拼装层
+    @MainActor
+    static func run(group: String?, limit: Int) -> Int {
+        DrawerCommands.sendToFront(group: group, limit: limit)
     }
 }
 
@@ -179,7 +224,13 @@ struct MoveItemsToGroupIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<Int> {
-        .result(value: DrawerCommands.moveItems(group: group, to: target, limit: limit))
+        .result(value: Self.run(group: group, target: target, limit: limit))
+    }
+
+    /// 拼装层
+    @MainActor
+    static func run(group: String?, target: String?, limit: Int) -> Int {
+        DrawerCommands.moveItems(group: group, to: target, limit: limit)
     }
 }
 
@@ -195,7 +246,13 @@ struct RenameItemIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<Bool> {
-        .result(value: DrawerCommands.renameItem(path: path, to: newName))
+        .result(value: Self.run(path: path, newName: newName))
+    }
+
+    /// 拼装层
+    @MainActor
+    static func run(path: String, newName: String) -> Bool {
+        DrawerCommands.renameItem(path: path, to: newName)
     }
 }
 

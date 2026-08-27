@@ -174,7 +174,8 @@ enum DrawerCommands {
 
     /// 展开 / 收起 / 切换
     static func setExpansion(expand: Bool?) {
-        guard let delegate = NSApp.delegate as? AppDelegate else { return }
+        // NSApp 在单元测试进程里可能为 nil（IUO 解包会崩）——先安全解包
+        guard let app = NSApp as NSApplication?, let delegate = app.delegate as? AppDelegate else { return }
         switch expand {
         case .none: delegate.toggleCollapseOrExpand()
         case .some(true): delegate.expandDrawer()
