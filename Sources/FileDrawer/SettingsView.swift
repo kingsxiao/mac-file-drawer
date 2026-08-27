@@ -137,6 +137,19 @@ private struct GeneralSettingsTab: View {
                 }
                 .disabled(store.missingIDs.isEmpty)
             }
+            Section("分组容量上限") {
+                ForEach(store.drawers) { group in
+                    Picker(group.name, selection: drawerLimitBinding(group.id)) {
+                        Text("跟随默认").tag(MaxItemsPolicy?.none)
+                        ForEach(MaxItemsPolicy.allCases) { limit in
+                            Text(limit.label).tag(MaxItemsPolicy?.some(limit))
+                        }
+                    }
+                }
+                Text("未单独设置的分组用上面的全局「容量上限」；调整后立即生效，淘汰各组内最早加入的条目（置顶豁免）。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
         .formStyle(.grouped)
         .frame(maxHeight: .infinity, alignment: .top)
@@ -156,6 +169,14 @@ private struct GeneralSettingsTab: View {
         if missing > 0 { parts.append("失效 \(missing)") }
         if store.drawers.count > 1 { parts.append("共 \(store.drawers.count) 组") }
         return parts.isEmpty ? "" : "（\(parts.joined(separator: " · "))）"
+    }
+
+    /// 分组容量选择绑定：nil = 跟随默认
+    private func drawerLimitBinding(_ drawerID: UUID) -> Binding<MaxItemsPolicy?> {
+        Binding(
+            get: { store.limitOverride(for: drawerID) },
+            set: { store.setLimitOverride($0, for: drawerID) }
+        )
     }
 
     private func setLaunchAtLogin(_ on: Bool) {

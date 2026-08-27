@@ -102,8 +102,11 @@ final class ShelfStore: ObservableObject {
     private static let defaultsKey = "com.wangxiao.filedrawer.items"
     private static let drawersKey = "com.wangxiao.filedrawer.drawers"
     private static let currentDrawerKey = "com.wangxiao.filedrawer.currentDrawer"
+    private static let drawerLimitsKey = "com.wangxiao.filedrawer.drawerLimits"
     /// 旧数据迁移 / 全新安装时的默认分组名
     static let defaultDrawerName = "默认"
+    /// 分组容量覆盖表里兜底的「无分组」键（异常数据归入同一名额池）
+    nonisolated static let unassignedDrawerID = UUID(uuidString: "00000000-0000-0000-0000-000000000000")!
 
     @Published var items: [ShelfItem] = [] {
         didSet {
@@ -118,6 +121,10 @@ final class ShelfStore: ObservableObject {
     /// 当前展示的分组（init 里立即替换为真实值）
     @Published private(set) var currentDrawerID: UUID = UUID() {
         didSet { persistDrawers() }
+    }
+    /// 每组独立容量上限覆盖（nil = 跟随全局默认 MaxItemsPolicy）
+    @Published private(set) var drawerLimitOverrides: [UUID: MaxItemsPolicy] = [:] {
+        didSet { persistDrawerLimits() }
     }
 
     /// 缩略图缓存（图片/视频真实预览）
@@ -169,6 +176,14 @@ final class ShelfStore: ObservableObject {
         } else {
             currentDrawerID = drawers[0].id
         }
+        // 每组容量覆盖（要在条目按容量收敛前就位）
+        if let data = UserDefaults.standard.data(forKey: Self.drawerLimitsKey),
+           let saved = try? JSONDecoder().decode([String: Int].self, from: data) {
+            drawerLimitOverrides = Dictionary(uniqueKeysWithValues: saved.compactMap { key, value in
+                guard let id = UUID(uuidString: key), let policy = MaxItemsPolicy(rawValue: value) else { return nil }
+                return (id, policy)
+            })
+        }
 
         if let data = UserDefaults.standard.data(forKey: Self.defaultsKey),
            let saved = try? JSONDecoder().decode([ShelfItem].self, from: data) {
@@ -179,7 +194,10 @@ final class ShelfStore: ObservableObject {
                 restored = restored.filter { FileManager.default.fileExists(atPath: $0.path) }
             }
             restored = Self.pruned(restored, policy: settings.autoClean)
-            restored = Self.trimmed(restored, limit: settings.maxItems)
+            let loadedLimits = drawerLimitOverrides
+            restored = Self.trimmedPerDrawer(restored) { drawerID in
+                loadedLimits[drawerID] ?? settings.maxItems
+            }
             // 旧版本条目没有 drawerID：归入第一个分组（通常是迁移出的「默认」）
             let fallbackDrawer = drawers[0].id
             for index in restored.indices where restored[index].drawerID == nil {
@@ -513,6 +531,56 @@ final class ShelfStore: ObservableObject {
         }
     }
 
+    // MARK: 分组容量上限（每组可覆盖全局默认）
+
+    /// 覆盖表持久化：[分组ID: 策略rawValue]
+    private func persistDrawerLimits() {
+        let raw = Dictionary(
+            uniqueKeysWithValues: drawerLimitOverrides.map { ($0.key.uuidString, $0.value.rawValue) }
+        )
+        if let data = try? JSONEncoder().encode(raw) {
+            UserDefaults.standard.set(data, forKey: Self.drawerLimitsKey)
+        }
+    }
+
+    /// 某分组的容量覆盖（nil = 跟随全局默认）
+    func limitOverride(for drawerID: UUID) -> MaxItemsPolicy? {
+        drawerLimitOverrides[drawerID]
+    }
+
+    /// 设置 / 清除某分组的容量覆盖（nil 清除），并立即按新策略收敛
+    func setLimitOverride(_ policy: MaxItemsPolicy?, for drawerID: UUID) {
+        guard drawerLimitOverrides[drawerID] != policy else { return }
+        if let policy {
+            drawerLimitOverrides[drawerID] = policy
+        } else {
+            drawerLimitOverrides.removeValue(forKey: drawerID)
+        }
+        applyMaintenancePolicies()
+    }
+
+    /// 生效容量：覆盖优先，否则全局默认
+    private func effectiveLimit(for drawerID: UUID) -> MaxItemsPolicy {
+        drawerLimitOverrides[drawerID] ?? AppSettings.shared.maxItems
+    }
+
+    /// 每组独立容量淘汰（纯函数）：按分组分区，各自按自己的上限淘汰最旧（置顶豁免），
+    /// 保留条目按原顺序拼回；drawerID 为 nil 的异常条目共享一个兜底名额池。
+    nonisolated static func trimmedPerDrawer(
+        _ items: [ShelfItem],
+        limitFor: (UUID) -> MaxItemsPolicy
+    ) -> [ShelfItem] {
+        var buckets: [UUID: [ShelfItem]] = [:]
+        for item in items {
+            buckets[item.drawerID ?? unassignedDrawerID, default: []].append(item)
+        }
+        var keep = Set<UUID>()
+        for (drawerID, groupItems) in buckets {
+            keep.formUnion(trimmed(groupItems, limit: limitFor(drawerID)).map(\.id))
+        }
+        return items.filter { keep.contains($0.id) }
+    }
+
     // MARK: 维护策略（纯函数，可单测）
 
     /// 过期自动清理：丢弃加入时间早于策略窗口的条目；置顶条目豁免
@@ -540,7 +608,7 @@ final class ShelfStore: ObservableObject {
     /// 按当前「过期清理 + 容量上限」策略收敛条目（设置调整时即时调用）
     private func applyMaintenancePolicies() {
         let settings = AppSettings.shared
-        let next = Self.trimmed(Self.pruned(items, policy: settings.autoClean), limit: settings.maxItems)
+        let next = Self.trimmedPerDrawer(Self.pruned(items, policy: settings.autoClean), limitFor: effectiveLimit)
         guard next.count != items.count else { return }
         let kept = Set(next.map(\.id))
         let dropped = items.filter { !kept.contains($0.id) }
@@ -552,7 +620,7 @@ final class ShelfStore: ObservableObject {
 
     @MainActor
     private func enforceCapacityLimit() {
-        let capped = Self.trimmed(items, limit: AppSettings.shared.maxItems)
+        let capped = Self.trimmedPerDrawer(items, limitFor: effectiveLimit)
         if capped.count != items.count {
             let kept = Set(capped.map(\.id))
             let dropped = items.filter { !kept.contains($0.id) }
