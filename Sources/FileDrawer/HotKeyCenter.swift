@@ -51,6 +51,14 @@ final class HotKeyCenter {
         )
         if status == noErr {
             hotKeyRef = ref
+        } else {
+            // 注册失败不再静默：写诊断日志 + 给用户可见提示
+            // 常见原因：组合被其他应用占用（如输入法/截图/Spotlight）
+            DiagnosticsLog.shared.log(
+                "hotkey",
+                "register failed status=\(status) key=\(binding.keyCode) mods=\(carbon) label=\(binding.displayLabel)"
+            )
+            ShelfStore.shared.postNotice(L10n.tf("热键「%@」注册失败，可能已被其他应用占用", binding.displayLabel))
         }
     }
 

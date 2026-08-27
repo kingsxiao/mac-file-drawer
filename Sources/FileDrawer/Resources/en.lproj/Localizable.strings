@@ -286,3 +286,6 @@
 
 /* 批次43 */
 "打开收件箱文件夹" = "Open Inbox Folder";
+
+/* 批次53：热键失败 */
+"热键「%@」注册失败，可能已被其他应用占用" = "Hotkey “%@” registration failed; it may be taken by another app";
