@@ -7,8 +7,8 @@ set -e
 cd "$(dirname "$0")"
 
 # 版本号唯一来源：发版只改这两行（关于面板、DMG 文件名都从产物里读）
-VERSION="1.1.0"
-BUILD="2"
+VERSION="1.2.0"
+BUILD="3"
 
 # 工具链探测：已设置 DEVELOPER_DIR 则尊重；否则优先完整版 Xcode；都没有就用 xcode-select 当前选择（纯 CLT 也能编译本项目）
 if [[ -z "$DEVELOPER_DIR" && -d /Applications/Xcode.app/Contents/Developer ]]; then
@@ -16,6 +16,7 @@ if [[ -z "$DEVELOPER_DIR" && -d /Applications/Xcode.app/Contents/Developer ]]; t
 fi
 
 UNIVERSAL=0
+BUILD_ARGS=()
 if [[ "$1" == "--universal" ]]; then
   UNIVERSAL=1
   BUILD_ARGS=(--arch arm64 --arch x86_64)
@@ -77,4 +78,4 @@ codesign --force -s - "$APP" >/dev/null 2>&1
 codesign --verify --strict "$APP"
 
 echo "✅ 已生成 $APP（v$VERSION build $BUILD，$(lipo -archs "$APP/Contents/MacOS/FileDrawer" | tr -s ' ' )）"
-echo "   安装到 /Applications：./install.sh    分发 DMG：./make_dmg.sh"
+echo "   安装到 /Applications：make install    分发 DMG：make dmg"
