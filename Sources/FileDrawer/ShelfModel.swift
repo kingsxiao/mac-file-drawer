@@ -83,7 +83,10 @@ final class ShelfStore: ObservableObject {
     private static let defaultsKey = "com.wangxiao.filedrawer.items"
 
     @Published var items: [ShelfItem] = [] {
-        didSet { persist() }
+        didSet {
+            persist()
+            refreshMissingStatus()
+        }
     }
 
     /// 缩略图缓存（图片/视频真实预览）
@@ -94,6 +97,13 @@ final class ShelfStore: ObservableObject {
     private var thumbInFlight = Set<UUID>()
     /// 大小文本缓存（按路径）：文件夹的大小要列目录，不能每次渲染都算
     private var sizeTextCache: [String: String] = [:]
+    /// 最近一次存在性扫描中，磁盘上已不存在的条目
+    /// （展示层据此降透明 + 「文件已不存在」提示；不自动移除）
+    @Published private(set) var missingIDs: Set<UUID> = []
+    /// 一次存在性扫描进行中（避免重复排队）
+    private var missingScanInFlight = false
+    /// 扫描进行中又有新请求：扫描完成后自动再扫一轮（合并而不是丢弃）
+    private var missingScanPending = false
     /// 设置里重新打开缩略图时，为已经显示过（错过 onAppear）的行补齐
     private var thumbnailSettingCancellable: AnyCancellable?
     /// 设置面板调整清理策略时立即生效（设置承诺「即时生效」）
@@ -148,6 +158,8 @@ final class ShelfStore: ObservableObject {
         if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil {
             settleInbox()
         }
+        // init 内赋值不触发 didSet：启动时手动扫一遍存在性
+        refreshMissingStatus()
     }
 
     func add(urls: [URL]) {
@@ -308,9 +320,51 @@ final class ShelfStore: ObservableObject {
             thumbs[id] = nil
             thumbFailed.remove(id)
             thumbInFlight.remove(id)
+            missingIDs.remove(id)
         }
         for path in paths {
             sizeTextCache.removeValue(forKey: path)
+        }
+    }
+
+    // MARK: 失效检测
+
+    /// 后台扫描条目文件存在性（fileExists × n，utility 队列），
+    /// 结果回主线程合并；只影响展示，不自动移除条目。
+    func refreshMissingStatus() {
+        let snapshot = items
+        guard !snapshot.isEmpty else {
+            if !missingIDs.isEmpty { missingIDs = [] }
+            return
+        }
+        if missingScanInFlight {
+            missingScanPending = true
+            return
+        }
+        missingScanInFlight = true
+        Task.detached(priority: .utility) {
+            let missing = Self.scanMissing(snapshot)
+            await ShelfStore.shared.applyMissingScan(missing)
+        }
+    }
+
+    nonisolated static func scanMissing(_ items: [ShelfItem]) -> Set<UUID> {
+        var missing = Set<UUID>()
+        for item in items where !FileManager.default.fileExists(atPath: item.path) {
+            missing.insert(item.id)
+        }
+        return missing
+    }
+
+    /// 扫描结果落地：只保留仍在列表里的条目（扫描期间列表可能已变化）；
+    /// 有挂起请求时自动补扫一轮。
+    private func applyMissingScan(_ result: Set<UUID>) {
+        missingScanInFlight = false
+        let merged = result.intersection(Set(items.map(\.id)))
+        if merged != missingIDs { missingIDs = merged }
+        if missingScanPending {
+            missingScanPending = false
+            refreshMissingStatus()
         }
     }
 

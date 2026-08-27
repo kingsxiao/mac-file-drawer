@@ -81,21 +81,46 @@
 
 > 键盘只在抽屉持有焦点时接管（单击任意条目即可）；正在搜索框输入时按键完全放行。
 
-## 构建 & 运行
+## 构建、安装与分发
+
+要求：macOS 14+，装有 Xcode 或仅命令行工具（CLT）皆可。
+
+**一键安装**（自动构建 → 退出旧实例 → 安装到 /Applications → 启动，可重复执行）：
 
 ```bash
-./make_app.sh
-open build/FileDrawer.app
+./install.sh            # 或 make install
 ```
 
-或开发调试：
+可选参数：`--app-dir <目录>` 装到别处、`--universal` 出通用二进制（arm64 + x86_64）、
+`--no-launch` 装完不启动、`--skip-build` 复用上次产物。
+
+**仅构建 / 开发调试**：
 
 ```bash
-swift build            # 编译调试版
-swift test             # 运行单元测试（含拖拽往返一致性测试）
+./make_app.sh           # 打包 build/FileDrawer.app（make app），随后 open build/FileDrawer.app 即可试跑
+swift build             # 编译调试版
+swift test              # 运行单元测试（含拖拽往返一致性测试）
 ```
 
-要求：macOS 14+，Xcode 命令行工具（`make_app.sh` 会使用 `/Applications/Xcode.app`）。
+**卸载**（退出应用 → 删除 .app → 清偏好设置；收件箱数据默认保留）：
+
+```bash
+./uninstall.sh                  # 或 make uninstall
+./uninstall.sh --purge-data     # 连 ~/Library/Application Support/FileDrawer 一并删除
+```
+
+**分发给别人**：
+
+```bash
+./make_dmg.sh           # 或 make dmg，产出 build/FileDrawer-<版本>-<架构>.dmg
+```
+
+DMG 里带「拖入 Applications」的符号链接；也可在 GitHub Actions 最新一次运行的
+Artifacts 里直接下载 `FileDrawer-universal.zip` / `.dmg`（CI 会构建通用二进制）。
+因为本项目只做临时签名（ad-hoc，无 Developer ID 证书），别人首次打开会被
+Gatekeeper 拦一下：在访达里**右键 → 打开**放行，或先执行
+`xattr -dr com.apple.quarantine FileDrawer.app`。
+
 
 ## 使用方法
 
@@ -133,6 +158,8 @@ Sources/FileDrawer/
 Tests/FileDrawerTests/       # 拖拽往返 / 搜索排序 / 设置与热键 / 布局几何 /
                              # 缩略图管线 / 暂存维护 / 图标目录 / 收件箱物化 /
                              # 剪贴板互通 / 移除撤销
+make_app.sh / install.sh / uninstall.sh / make_dmg.sh / Makefile
+                             # 构建 / 一键安装 / 卸载 / DMG 分发（make app|install|uninstall|dmg）
 ```
 
 ## 实现要点

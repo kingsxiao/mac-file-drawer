@@ -590,15 +590,8 @@ private struct ItemRow: View {
                 .animation(.spring(response: 0.28, dampingFraction: 0.6), value: hovered)
 
             VStack(alignment: .leading, spacing: settings.compactRows ? 1.5 : 2.5) {
-                highlightName
-
-                if !metaLine.isEmpty {
-                    Text(metaLine)
-                        .font(.system(size: settings.compactRows ? 10.5 : 11))
-                        .foregroundStyle(.tertiary)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                }
+                nameRow
+                metaRow
             }
 
             Spacer(minLength: 4)
@@ -663,8 +656,9 @@ private struct ItemRow: View {
             y: hovered ? 3 : 0
         )
         // 入场：从贴边侧滑入淡入；新拖入的条目交给列表 insertion transition
-        .opacity(entered ? 1 : 0)
+        .opacity(entered ? (isMissing ? 0.55 : 1) : 0)
         .offset(x: entered ? 0 : (settings.edge == .right ? 18 : -18))
+        .animation(.easeOut(duration: 0.3), value: isMissing)
         .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .onHover { hovering in
             withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
@@ -673,14 +667,14 @@ private struct ItemRow: View {
         }
         // 先注册双击（打开），再注册单击（选中）；SwiftUI 会优先匹配高次数手势。
         .onTapGesture(count: 2) {
-            NSWorkspace.shared.open(item.url)
+            openItem()
         }
         .onTapGesture {
             // ⌘/⇧ 点击 = 多选（访达语义）；普通单击在「直接打开」设置下立即打开
             let flags = NSEvent.modifierFlags.intersection(.deviceIndependentFlagsMask)
             if settings.openOnSingleClick, !flags.contains(.command), !flags.contains(.shift) {
                 selectRow()
-                NSWorkspace.shared.open(item.url)
+                openItem()
                 return
             }
             DrawerPanel.active?.makeKeyAndOrderFront(nil)
@@ -738,6 +732,51 @@ private struct ItemRow: View {
 
     private var metaLine: String { item.metaLine(settings: settings) }
 
+    /// 文件已不在磁盘上（后台扫描结果）
+    private var isMissing: Bool { store.missingIDs.contains(item.id) }
+
+    /// 元信息行文案：失效条目前缀「文件已不存在」提示
+    private var displayMeta: String {
+        if !isMissing { return metaLine }
+        return metaLine.isEmpty ? "文件已不存在" : "文件已不存在 · \(metaLine)"
+    }
+
+    /// 名称行：搜索命中高亮 + 失效警示角标
+    private var nameRow: some View {
+        HStack(spacing: 4) {
+            highlightName
+            if isMissing {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(DrawerTheme.danger)
+                    .help("文件已不存在")
+            }
+        }
+    }
+
+    /// 元信息行：大小 · 时间；失效时红色提示
+    @ViewBuilder
+    private var metaRow: some View {
+        if isMissing || !metaLine.isEmpty {
+            Text(displayMeta)
+                .font(.system(size: settings.compactRows ? 10.5 : 11))
+                .foregroundStyle(isMissing
+                                 ? AnyShapeStyle(DrawerTheme.danger.opacity(0.75))
+                                 : AnyShapeStyle(.tertiary))
+                .lineLimit(1)
+                .truncationMode(.tail)
+        }
+    }
+
+    /// 打开守卫：失效条目不给系统投递 open（避免无声失败），提示音代替
+    private func openItem() {
+        if isMissing {
+            NSSound.beep()
+            return
+        }
+        NSWorkspace.shared.open(item.url)
+    }
+
     /// 右键菜单操作目标：行在多选集合里 → 整个集合（访达语义）
     private var menuTargets: [ShelfItem] {
         interaction.selectionTargets(
@@ -755,7 +794,9 @@ private struct ItemRow: View {
     private var rowContextMenu: some View {
         let targets = menuTargets
         Button("打开\(countSuffix(targets))") {
-            for target in targets { NSWorkspace.shared.open(target.url) }
+            let openable = targets.filter { !store.missingIDs.contains($0.id) }
+            if openable.count < targets.count { NSSound.beep() }
+            for target in openable { NSWorkspace.shared.open(target.url) }
         }
         Button("快速预览") { interaction.togglePreview(for: item) }
         Button("在访达中显示\(countSuffix(targets))") {

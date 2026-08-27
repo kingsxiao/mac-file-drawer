@@ -137,10 +137,12 @@ final class KeyboardRouter {
             }
             return nil
 
-        case 36, 76: // Return / Enter：打开选中文件（多选时全部打开）
+        case 36, 76: // Return / Enter：打开选中文件（多选时全部打开；失效的跳过并提示）
             let targets = model.selectedItems(in: displayed)
             if !targets.isEmpty {
-                for item in targets { NSWorkspace.shared.open(item.url) }
+                let openable = targets.filter { !store.missingIDs.contains($0.id) }
+                if openable.count < targets.count { NSSound.beep() }
+                for item in openable { NSWorkspace.shared.open(item.url) }
                 return nil
             }
 
@@ -234,6 +236,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 ? DrawerLayout.collapsedFrame(visibleFrame: screen.visibleFrame, settings: self.settings)
                 : DrawerLayout.expandedFrame(visibleFrame: screen.visibleFrame, settings: self.settings)
             self.animateFrame(to: target)
+            // 展开时顺带校验一遍条目文件存在性（收起期间文件可能被外部删除）
+            if !collapsed { ShelfStore.shared.refreshMissingStatus() }
         }
 
         // 设置变化 → 外观 / 层级 / 热键 / 边框即时生效

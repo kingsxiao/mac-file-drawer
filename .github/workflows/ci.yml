@@ -21,11 +21,23 @@ jobs:
       - name: Test
         run: swift test
 
-      - name: Package .app
-        run: ./make_app.sh
+      - name: Package .app (universal)
+        run: zsh ./make_app.sh --universal
 
-      - name: Upload app artifact
+      - name: Zip app
+        run: ditto -c -k --keepParent build/FileDrawer.app build/FileDrawer.zip
+
+      - name: Build DMG
+        run: zsh ./make_dmg.sh --universal
+
+      - name: Upload zip artifact
         uses: actions/upload-artifact@v4
         with:
-          name: FileDrawer.app
-          path: build/FileDrawer.app
+          name: FileDrawer-universal.zip
+          path: build/FileDrawer.zip
+
+      - name: Upload DMG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FileDrawer-universal.dmg
+          path: build/*.dmg
