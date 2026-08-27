@@ -195,6 +195,25 @@ defaults 域已有数据时自动备份-恢复（`--isolated`）、结束自清�
 | 移除并反悔 | 悬停 ✕ / Delete 移除后，点底部提示条「还原」放回原位；预览打开时按 Delete 移除当前条目并自动切到下一条继续预览 |
 | 清空 | 菜单栏图标 →「清空抽屉」（同样可「还原」） |
 
+## 分发与公证就绪
+
+当前 DMG 为 **ad-hoc 签名**（无 Developer ID）——发给同事/朋友用没问题，但他们首次打开会被
+Gatekeeper 拦截（右键 → 打开放行，或 `xattr -dr com.apple.quarantine FileDrawer.app`）。
+若要公网分发免拦截，按以下清单补齐（脚本已就绪，只需三步）：
+
+| # | 事项 | 命令 / 位置 |
+| --- | --- | --- |
+| 1 | Apple Developer Program 账号（年费） | [developer.apple.com](https://developer.apple.com) |
+| 2 | 导入 Developer ID Application 证书 | 钥匙串（Xcode → Settings → Accounts） |
+| 3 | make_app.sh 签名段改为证书签名 | `codesign --force --options runtime --timestamp -s "Developer ID Application: <名字> (<TeamID>)" "$APP"` |
+| 4 | App Store Connect 生成 App 专用密码 | [notarize](https://notary.apple.com)（存入钥匙串：`xcrun notarytool store-credentials`） |
+| 5 | 打包后公证 .app | `xcrun notarytool submit <zip> --keychain-profile <profile> --wait` |
+| 6 | 公证结果钉到 DMG | `xcrun stapler staple <dmg>` |
+| 7 | 验证 | `spctl -a -v --toplevel <app>` 应输出 `accepted`；`stapler validate <dmg>` |
+
+CI 侧对应改动：`ci.yml` 里 `zsh ./make_app.sh` 步骤不变（签名参数走环境变量
+`SIGN_IDENTITY`），加两步 notarytool submit / stapler staple，凭据用 GitHub Secrets。
+
 ## 界面语言（中 / 英）
 
 设置 → 外观 → **界面语言**：跟随系统 / 中文 / English，切换立即生效
