@@ -103,6 +103,8 @@ final class InteractionModel: ObservableObject {
     var onCollapseChange: ((Bool) -> Void)?
     /// 递增 token：让搜索框聚焦的时机可控（Cmd+F / 点放大镜）
     @Published var searchFocusToken = 0
+    /// 行内拖拽排序：当前悬停的目标行（插入指示条），无拖拽时为 nil
+    @Published var reorderTargetID: UUID?
 
     /// 测试可直接构造独立实例；应用代码使用 shared
     init() {

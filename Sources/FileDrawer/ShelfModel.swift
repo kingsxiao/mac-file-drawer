@@ -410,6 +410,27 @@ final class ShelfStore: ObservableObject {
         withAnimation(DrawerMotion.smooth) { items = next }
     }
 
+    /// 手动排序（拖拽把手）：把整批条目移到目标条目前方，保持批内相对顺序。
+    /// 跨置顶分区拖拽 = 整块对齐目标分区的置顶态（拖进置顶区即置顶，拖出即取消）。
+    func move(ids: [UUID], before targetID: UUID) {
+        guard let targetIndex = items.firstIndex(where: { $0.id == targetID }) else { return }
+        let targetPinned = items[targetIndex].pinned
+        let set = Set(ids)
+        guard !set.contains(targetID) else { return } // 拖到自己块上：无操作
+        let moving = items.filter { set.contains($0.id) }
+        guard !moving.isEmpty else { return }
+        var rest = items.filter { !set.contains($0.id) }
+        guard let restTarget = rest.firstIndex(where: { $0.id == targetID }) else { return }
+
+        var movingItems = moving
+        if movingItems.contains(where: { $0.pinned != targetPinned }) {
+            for index in movingItems.indices { movingItems[index].pinned = targetPinned }
+        }
+        rest.insert(contentsOf: movingItems, at: restTarget)
+        guard rest != items else { return }
+        withAnimation(DrawerMotion.smooth) { items = rest }
+    }
+
     /// 手动排序：整批（保持 items 内相对顺序）移到最前 / 最后
     func send(ids: [UUID], toFront: Bool) {
         let set = Set(ids)

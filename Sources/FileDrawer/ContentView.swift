@@ -328,6 +328,16 @@ struct ContentView: View {
                             entranceIndex: index,
                             staggerEntrance: entranceWindowActive
                         )
+                        // 行级接收器：只认抽屉内部的排序拖拽（自定义类型），
+                        // 外部拖入 / 拖出文件的语义不受影响
+                        .onDrop(
+                            of: [ReorderDrag.type],
+                            delegate: RowReorderDropDelegate(
+                                rowID: item.id,
+                                store: store,
+                                interaction: interaction
+                            )
+                        )
                         .transition(.asymmetric(
                             insertion: .move(edge: settings.edge == .right ? .trailing : .leading).combined(with: .opacity),
                             removal: .opacity.combined(with: .scale(scale: 0.94))
@@ -346,6 +356,54 @@ struct ContentView: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - 行内拖拽排序：行级接收代理
+
+private struct RowReorderDropDelegate: DropDelegate {
+    let rowID: UUID
+    let store: ShelfStore
+    let interaction: InteractionModel
+
+    /// 只接收带内部排序标记的拖拽；外部文件拖拽没有该类型，自然落到抽屉级接收器
+    func validateDrop(info: DropInfo) -> Bool {
+        guard let provider = info.itemProviders(for: [ReorderDrag.type]).first else { return false }
+        return ReorderDrag.itemID(from: provider) != nil
+    }
+
+    func dropEntered(info: DropInfo) {
+        interaction.reorderTargetID = rowID
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
+    }
+
+    func dropExited(info: DropInfo) {
+        if interaction.reorderTargetID == rowID { interaction.reorderTargetID = nil }
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        interaction.reorderTargetID = nil
+        guard let provider = info.itemProviders(for: [ReorderDrag.type]).first,
+              let draggedID = ReorderDrag.itemID(from: provider),
+              draggedID != rowID else { return true }
+
+        // 拖拽行在多选集合里 → 整批一起移动（访达语义）
+        var movingIDs = [draggedID]
+        if interaction.selectedIDs.contains(draggedID), interaction.selectedIDs.count > 1 {
+            let sort = interaction.sortMode(for: store.currentDrawerID)
+            let displayed = interaction.displayItems(from: store.currentItems, sort: sort)
+            movingIDs = displayed.filter { interaction.selectedIDs.contains($0.id) }.map(\.id)
+        }
+
+        withAnimation(DrawerMotion.smooth) {
+            let sort = interaction.sortMode(for: store.currentDrawerID)
+            if sort != .manual { interaction.setSortMode(.manual, for: store.currentDrawerID) }
+            store.move(ids: movingIDs, before: rowID)
+        }
+        return true
     }
 }
 
@@ -700,6 +758,34 @@ private struct ItemRow: View {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(rowFill)
         )
+        // 行内排序插入指示条：拖拽悬停到本行上方时亮起
+        .overlay(alignment: .top) {
+            if interaction.reorderTargetID == item.id {
+                Capsule()
+                    .fill(DrawerTheme.accentGradient)
+                    .frame(height: 2.5)
+                    .padding(.horizontal, 8)
+                    .shadow(color: DrawerTheme.accent.opacity(0.5), radius: 3)
+                    .allowsHitTesting(false)
+            }
+        }
+        // 悬停出现的排序把手：拖它调整顺序（拖出抽屉外仍是拷贝文件）
+        .overlay(alignment: .leading) {
+            Image(systemName: "line.3.horizontal")
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 13, height: 34)
+                .contentShape(Rectangle())
+                .opacity(hovered ? 1 : 0)
+                .allowsHitTesting(hovered)
+                .onDrag {
+                    let provider = item.dragProvider()
+                    ReorderDrag.register(provider, id: item.id)
+                    return provider
+                }
+                .help("拖动调整顺序（自动切入手动顺序；拖出抽屉外 = 拷贝文件）")
+                .offset(x: -1)
+        }
         // 选中指示条：前缘的品牌渐变小胶囊，随选中状态弹性伸缩
         .overlay(alignment: .leading) {
             Capsule()
