@@ -1350,7 +1350,10 @@ private struct PreviewOverlayView: View {
                 .contentShape(Rectangle())
                 .onTapGesture { interaction.closePreview() }
 
-            card
+            GeometryReader { geo in
+                card(height: min(384, max(240, geo.size.height - 24)))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .transition(
@@ -1361,7 +1364,8 @@ private struct PreviewOverlayView: View {
         )
     }
 
-    private var card: some View {
+    /// 卡片高度上限 384pt；小屏 / 低占屏比例时随抽屉可用高度收缩（下限 240）
+    private func card(height: CGFloat) -> some View {
         VStack(spacing: 0) {
             header
             Divider().overlay(Color.primary.opacity(0.08))
@@ -1369,7 +1373,7 @@ private struct PreviewOverlayView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
             footerHints
         }
-        .frame(height: 384)
+        .frame(height: height)
         .background(
             RoundedRectangle(cornerRadius: 17, style: .continuous)
                 .fill(.regularMaterial)
