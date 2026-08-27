@@ -99,16 +99,14 @@ private struct GeneralSettingsTab: View {
                     .foregroundStyle(.secondary)
             }
             Section("列表") {
-                Picker("默认排序", selection: $interaction.sortMode) {
+                Picker("默认排序", selection: $interaction.defaultSortMode) {
                     ForEach(InteractionModel.SortMode.allCases) { mode in
                         Text(mode.label).tag(mode)
                     }
                 }
-                if interaction.sortMode == .manual {
-                    Text("手动顺序由条目右键菜单「调整顺序」或 ⌘↑ / ⌘↓ 维护。")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+                Text("未单独设置排序的分组（含新建分组）用它；每个分组可点头部排序菜单单独设置，互不影响。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 Toggle("单击直接打开", isOn: $settings.openOnSingleClick)
                 Text("开启后单击条目即打开文件；默认单击选中、双击打开（⌘/⇧点击可多选）。")
                     .font(.caption)

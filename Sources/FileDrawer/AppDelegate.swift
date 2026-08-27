@@ -45,7 +45,7 @@ final class KeyboardRouter {
         if panel.firstResponder is NSTextView { return event }
 
         // 键盘操作的作用域 = 当前分组的展示条目
-        let displayed = model.displayItems(from: store.currentItems)
+        let displayed = model.displayItems(from: store.currentItems, sort: model.sortMode(for: store.currentDrawerID))
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
 
         // Cmd+F 聚焦/显示搜索框
@@ -86,7 +86,9 @@ final class KeyboardRouter {
             let targets = model.selectedItems(in: displayed)
             guard !targets.isEmpty else { return event }
             withAnimation(DrawerMotion.smooth) {
-                if model.sortMode != .manual { model.sortMode = .manual }
+                if model.sortMode(for: store.currentDrawerID) != .manual {
+                    model.setSortMode(.manual, for: store.currentDrawerID)
+                }
                 store.nudge(ids: targets.map(\.id), by: event.keyCode == 126 ? -1 : 1)
             }
             return nil

@@ -19,7 +19,7 @@ struct ContentView: View {
 
     /// 当前应展示的条目（当前分组 + 过滤 + 排序后）
     private var displayedItems: [ShelfItem] {
-        interaction.displayItems(from: store.currentItems)
+        interaction.displayItems(from: store.currentItems, sort: interaction.sortMode(for: store.currentDrawerID))
     }
 
     var body: some View {
@@ -548,13 +548,17 @@ private struct HeaderView: View {
         }
     }
 
+    /// 排序菜单：设置的是当前分组的独立排序（各组互不影响）
     private var sortMenu: some View {
-        Menu {
+        let currentSort = interaction.sortMode(for: store.currentDrawerID)
+        return Menu {
             ForEach(InteractionModel.SortMode.allCases) { mode in
                 Button {
-                    withAnimation(.easeOut(duration: 0.18)) { interaction.sortMode = mode }
+                    withAnimation(.easeOut(duration: 0.18)) {
+                        interaction.setSortMode(mode, for: store.currentDrawerID)
+                    }
                 } label: {
-                    if interaction.sortMode == mode {
+                    if currentSort == mode {
                         Label(mode.label, systemImage: "checkmark")
                     } else {
                         Text(mode.label)
@@ -578,7 +582,7 @@ private struct HeaderView: View {
             withAnimation(.easeOut(duration: 0.12)) { sortHovered = hovering }
             (hovering ? NSCursor.pointingHand : NSCursor.arrow).set()
         }
-        .help("排序")
+        .help("排序（仅当前分组）")
     }
 }
 
@@ -779,7 +783,7 @@ private struct ItemRow: View {
                 } else if flags.contains(.shift) {
                     interaction.extendSelection(
                         to: item,
-                        within: interaction.displayItems(from: store.currentItems)
+                        within: interaction.displayItems(from: store.currentItems, sort: interaction.sortMode(for: store.currentDrawerID))
                     )
                 } else {
                     interaction.select(item)
@@ -896,7 +900,7 @@ private struct ItemRow: View {
     private var menuTargets: [ShelfItem] {
         interaction.selectionTargets(
             containing: item,
-            in: interaction.displayItems(from: store.currentItems)
+            in: interaction.displayItems(from: store.currentItems, sort: interaction.sortMode(for: store.currentDrawerID))
         )
     }
 
@@ -959,7 +963,9 @@ private struct ItemRow: View {
     /// 手动调整顺序：首次使用自动切换到「手动顺序」排序
     private func reorderTargets(_ targets: [ShelfItem], nudge: Int? = nil, sendToFront: Bool? = nil) {
         withAnimation(DrawerMotion.smooth) {
-            if interaction.sortMode != .manual { interaction.sortMode = .manual }
+            if interaction.sortMode(for: store.currentDrawerID) != .manual {
+                interaction.setSortMode(.manual, for: store.currentDrawerID)
+            }
             if let nudge {
                 store.nudge(ids: targets.map(\.id), by: nudge)
             } else if let sendToFront {
@@ -1118,7 +1124,7 @@ private struct ItemRow: View {
         // 行内 ✕ 与右键菜单同语义：行在多选集合里 → 整批移除（可整批还原）
         removeTargets(interaction.selectionTargets(
             containing: item,
-            in: interaction.displayItems(from: store.currentItems)
+            in: interaction.displayItems(from: store.currentItems, sort: interaction.sortMode(for: store.currentDrawerID))
         ))
     }
 

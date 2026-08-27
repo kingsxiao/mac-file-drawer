@@ -6,6 +6,7 @@ import SwiftUI
 final class InteractionModel: ObservableObject {
     static let shared = InteractionModel()
     private static let sortDefaultsKey = "com.wangxiao.filedrawer.sortMode"
+    private static let perDrawerSortKey = "com.wangxiao.filedrawer.sortModes.v2"
 
     enum SortMode: Int, CaseIterable, Identifiable {
         case timeNewestFirst = 0
@@ -46,8 +47,35 @@ final class InteractionModel: ObservableObject {
         }
     }
     @Published var isSearchVisible = false
-    @Published var sortMode: SortMode {
-        didSet { UserDefaults.standard.set(sortMode.rawValue, forKey: Self.sortDefaultsKey) }
+    /// 默认排序：没有单独设置的分组（以及新建分组）用它；设置面板可改
+    @Published var defaultSortMode: SortMode {
+        didSet { UserDefaults.standard.set(defaultSortMode.rawValue, forKey: Self.sortDefaultsKey) }
+    }
+    /// 各分组的独立排序覆盖（分组成员自己的排序选择）
+    @Published private var drawerSortOverrides: [UUID: SortMode] = [:] {
+        didSet { persistDrawerSortOverrides() }
+    }
+
+    /// 某分组的生效排序：有单独设置用之，否则回退默认
+    func sortMode(for drawerID: UUID) -> SortMode {
+        drawerSortOverrides[drawerID] ?? defaultSortMode
+    }
+
+    /// 为分组设置独立排序
+    func setSortMode(_ mode: SortMode, for drawerID: UUID) {
+        drawerSortOverrides[drawerID] = mode
+    }
+
+    /// 撤销某分组的独立排序（回到默认）
+    func resetSortMode(for drawerID: UUID) {
+        drawerSortOverrides.removeValue(forKey: drawerID)
+    }
+
+    private func persistDrawerSortOverrides() {
+        let raw = Dictionary(uniqueKeysWithValues: drawerSortOverrides.map { ($0.key.uuidString, $0.value.rawValue) })
+        if let data = try? JSONEncoder().encode(raw) {
+            UserDefaults.standard.set(data, forKey: Self.perDrawerSortKey)
+        }
     }
     /// 多选集合：当前所有选中的条目；空 = 无选中
     @Published var selectedIDs: Set<UUID> = []
@@ -79,7 +107,14 @@ final class InteractionModel: ObservableObject {
     /// 测试可直接构造独立实例；应用代码使用 shared
     init() {
         let raw = UserDefaults.standard.integer(forKey: Self.sortDefaultsKey)
-        sortMode = SortMode(rawValue: raw) ?? .timeNewestFirst
+        defaultSortMode = SortMode(rawValue: raw) ?? .timeNewestFirst
+        if let data = UserDefaults.standard.data(forKey: Self.perDrawerSortKey),
+           let saved = try? JSONDecoder().decode([String: Int].self, from: data) {
+            drawerSortOverrides = Dictionary(uniqueKeysWithValues: saved.compactMap { key, value in
+                guard let id = UUID(uuidString: key), let mode = SortMode(rawValue: value) else { return nil }
+                return (id, mode)
+            })
+        }
     }
 
     // MARK: 纯函数（可单测，无隔离）
@@ -166,12 +201,18 @@ final class InteractionModel: ObservableObject {
         }
     }
 
-    func displayItems(from items: [ShelfItem]) -> [ShelfItem] {
+    /// 展示管线：过滤 → 置顶分区 → 各分区按指定排序
+    func displayItems(from items: [ShelfItem], sort: SortMode) -> [ShelfItem] {
         let filtered = Self.filter(items, query: searchText)
         // 置顶条目永远浮在最前；置顶 / 普通两组内部各自按当前排序
-        let pinned = Self.sorted(filtered.filter(\.pinned), by: sortMode)
-        let rest = Self.sorted(filtered.filter { !$0.pinned }, by: sortMode)
+        let pinned = Self.sorted(filtered.filter(\.pinned), by: sort)
+        let rest = Self.sorted(filtered.filter { !$0.pinned }, by: sort)
         return pinned + rest
+    }
+
+    /// 便捷重载：按默认排序（测试与无分组上下文的调用方使用）
+    func displayItems(from items: [ShelfItem]) -> [ShelfItem] {
+        displayItems(from: items, sort: defaultSortMode)
     }
 
     // MARK: 选择与预览

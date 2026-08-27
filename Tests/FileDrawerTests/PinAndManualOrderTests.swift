@@ -25,7 +25,7 @@ final class PinAndManualOrderTests: XCTestCase {
                 item("丙.txt", age: 100),
             ]
             for mode in InteractionModel.SortMode.allCases {
-                model.sortMode = mode
+                model.defaultSortMode = mode
                 let displayed = model.displayItems(from: items)
                 XCTAssertEqual(displayed.first?.name, "乙.txt", "\(mode.label) 下置顶项应排最前")
                 XCTAssertEqual(displayed.count, 3)
@@ -37,7 +37,7 @@ final class PinAndManualOrderTests: XCTestCase {
     func testManualModeKeepsArrayOrder() {
         MainActor.assumeIsolated {
             let model = InteractionModel()
-            model.sortMode = .manual
+            model.defaultSortMode = .manual
             let items = [
                 item("乙.txt", age: 200),
                 item("甲.txt", age: 300),
@@ -150,6 +150,26 @@ final class PinAndManualOrderTests: XCTestCase {
 
             store.togglePinned(for: store.items)
             XCTAssertTrue(store.items.allSatisfy { !$0.pinned }, "全部已置顶 → 全部取消")
+        }
+    }
+
+    /// 每组独立排序：覆盖优先于默认；displayItems 接受显式排序
+    func testPerDrawerSortOverride() {
+        MainActor.assumeIsolated {
+            let model = InteractionModel()
+            model.defaultSortMode = .timeNewestFirst
+            let items = [item("旧.txt", age: 300), item("新.txt", age: 10)]
+
+            let drawerA = UUID()
+            XCTAssertEqual(model.sortMode(for: drawerA), .timeNewestFirst, "未设置时回退默认")
+            XCTAssertEqual(model.displayItems(from: items, sort: model.sortMode(for: drawerA)).first?.name, "新.txt")
+
+            model.setSortMode(.nameAscending, for: drawerA)
+            XCTAssertEqual(model.sortMode(for: drawerA), .nameAscending)
+            XCTAssertEqual(model.sortMode(for: UUID()), .timeNewestFirst, "其他分组不受影响")
+
+            model.resetSortMode(for: drawerA)
+            XCTAssertEqual(model.sortMode(for: drawerA), .timeNewestFirst, "撤销覆盖回到默认")
         }
     }
 }
