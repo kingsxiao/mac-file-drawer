@@ -29,6 +29,13 @@ final class SettingsWindowManager {
 
     var isVisible: Bool { window?.isVisible ?? false }
 
+    /// 语言切换后重建设置面板内容
+    func refreshLocalization() {
+        if let window, let hosting = window.contentView as? NSHostingView<SettingsView> {
+            hosting.rootView = SettingsView()
+        }
+    }
+
     func show() {
         if window == nil {
             // contentRect 与 SettingsView 的固定 frame 对齐，避免HostingView 留死边
@@ -38,7 +45,7 @@ final class SettingsWindowManager {
                 backing: .buffered,
                 defer: false
             )
-            w.title = "文件抽屉设置"
+            w.title = L10n.t("文件抽屉") + " · " + L10n.t("设置")
             w.isReleasedWhenClosed = false
             w.contentView = NSHostingView(rootView: SettingsView())
             w.center()
@@ -55,13 +62,13 @@ struct SettingsView: View {
     var body: some View {
         TabView {
             GeneralSettingsTab()
-                .tabItem { Label("通用", systemImage: "gearshape") }
+                .tabItem { Label(L10n.t("通用"), systemImage: "gearshape") }
             AppearanceSettingsTab()
-                .tabItem { Label("外观", systemImage: "paintbrush") }
+                .tabItem { Label(L10n.t("外观"), systemImage: "paintbrush") }
             BehaviorSettingsTab()
-                .tabItem { Label("行为", systemImage: "wand.and.stars") }
+                .tabItem { Label(L10n.t("行为"), systemImage: "wand.and.stars") }
             ShortcutSettingsTab()
-                .tabItem { Label("快捷键", systemImage: "keyboard") }
+                .tabItem { Label(L10n.t("快捷键"), systemImage: "keyboard") }
         }
         .frame(width: 480, height: 440)
     }
@@ -79,12 +86,12 @@ private struct GeneralSettingsTab: View {
 
     var body: some View {
         Form {
-            Section("启动") {
-                Picker("启动时", selection: $settings.launchCollapsed) {
-                    Text("展开抽屉").tag(false)
-                    Text("收起为边条").tag(true)
+            Section(L10n.t("启动")) {
+                Picker(L10n.t("启动时"), selection: $settings.launchCollapsed) {
+                    Text(L10n.t("展开抽屉")).tag(false)
+                    Text(L10n.t("收起为边条")).tag(true)
                 }
-                Toggle("登录 macOS 后自动启动", isOn: Binding(
+                Toggle(L10n.t("登录 macOS 后自动启动"), isOn: Binding(
                     get: { launchAtLogin },
                     set: { setLaunchAtLogin($0) }
                 ))
@@ -93,56 +100,56 @@ private struct GeneralSettingsTab: View {
                         .font(.caption)
                         .foregroundStyle(.red)
                 }
-                Toggle("丢弃已不存在的文件", isOn: $settings.removeMissingOnLaunch)
-                Text("关闭后，指向已删除文件的条目会保留在抽屉里，直到手动移除。")
+                Toggle(L10n.t("丢弃已不存在的文件"), isOn: $settings.removeMissingOnLaunch)
+                Text(L10n.t("关闭后，指向已删除文件的条目会保留在抽屉里，直到手动移除。"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            Section("列表") {
-                Picker("默认排序", selection: $interaction.defaultSortMode) {
+            Section(L10n.t("列表")) {
+                Picker(L10n.t("默认排序"), selection: $interaction.defaultSortMode) {
                     ForEach(InteractionModel.SortMode.allCases) { mode in
                         Text(mode.label).tag(mode)
                     }
                 }
-                Text("未单独设置排序的分组（含新建分组）用它；每个分组可点头部排序菜单单独设置，互不影响。")
+                Text(L10n.t("未单独设置排序的分组（含新建分组）用它；每个分组可点头部排序菜单单独设置，互不影响。"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                Toggle("搜索时也匹配文件内容（Spotlight）", isOn: $settings.searchFileContents)
+                Toggle(L10n.t("搜索时也匹配文件内容（Spotlight）"), isOn: $settings.searchFileContents)
                     .help("名称没命中时，用 Spotlight 检索文件内容补充结果；被索引过的文档 / 文本才有效")
-                Toggle("单击直接打开", isOn: $settings.openOnSingleClick)
-                Text("开启后单击条目即打开文件；默认单击选中、双击打开（⌘/⇧点击可多选）。")
+                Toggle(L10n.t("单击直接打开"), isOn: $settings.openOnSingleClick)
+                Text(L10n.t("开启后单击条目即打开文件；默认单击选中、双击打开（⌘/⇧点击可多选）。"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            Section("暂存维护") {
-                Picker("自动清理过期条目", selection: $settings.autoClean) {
+            Section(L10n.t("暂存维护")) {
+                Picker(L10n.t("自动清理过期条目"), selection: $settings.autoClean) {
                     ForEach(AutoCleanPolicy.allCases) { policy in
                         Text(policy.label).tag(policy)
                     }
                 }
-                Picker("容量上限", selection: $settings.maxItems) {
+                Picker(L10n.t("容量上限"), selection: $settings.maxItems) {
                     ForEach(MaxItemsPolicy.allCases) { limit in
                         Text(limit.label).tag(limit)
                     }
                 }
-                Text("超出上限时淘汰最早加入的条目；置顶条目不受过期清理与容量淘汰影响。")
+                Text(L10n.t("超出上限时淘汰最早加入的条目；置顶条目不受过期清理与容量淘汰影响。"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                LabeledContent("当前分组条目") {
+                LabeledContent(L10n.t("当前分组条目")) {
                     Text("\(store.currentItems.count) 个\(inventorySuffix)")
                         .foregroundStyle(.secondary)
                 }
                 Button(store.missingIDs.isEmpty
-                       ? "立即清理已不存在的条目"
-                       : "立即清理已不存在的条目（\(store.missingIDs.count) 个）") {
+                       ? L10n.t("立即清理已不存在的条目")
+                       : L10n.t("立即清理已不存在的条目") + "（\(store.missingIDs.count)）") {
                     store.removeMissing()
                 }
                 .disabled(store.missingIDs.isEmpty)
             }
-            Section("分组容量上限") {
+            Section(L10n.t("分组容量上限")) {
                 ForEach(store.drawers) { group in
                     Picker(group.name, selection: drawerLimitBinding(group.id)) {
-                        Text("跟随默认").tag(MaxItemsPolicy?.none)
+                        Text(L10n.t("跟随默认")).tag(MaxItemsPolicy?.none)
                         ForEach(MaxItemsPolicy.allCases) { limit in
                             Text(limit.label).tag(MaxItemsPolicy?.some(limit))
                         }
@@ -200,16 +207,21 @@ private struct AppearanceSettingsTab: View {
 
     var body: some View {
         Form {
-            Section("主题") {
-                Picker("外观", selection: $settings.appearance) {
+            Section(L10n.t("主题")) {
+                Picker("界面语言", selection: $settings.language) {
+                    ForEach(AppLanguage.allCases) { language in
+                        Text(L10n.t(language.label)).tag(language)
+                    }
+                }
+                Picker(L10n.t("外观"), selection: $settings.appearance) {
                     ForEach(DrawerAppearance.allCases) { appearance in
                         Text(appearance.label).tag(appearance)
                     }
                 }
                 .pickerStyle(.segmented)
             }
-            Section("抽屉尺寸") {
-                LabeledContent("宽度") {
+            Section(L10n.t("抽屉尺寸")) {
+                LabeledContent(L10n.t("宽度")) {
                     HStack(spacing: 8) {
                         Slider(value: $settings.drawerWidth, in: DrawerLayout.minWidth...DrawerLayout.maxWidth, step: 5)
                         Text("\(Int(settings.drawerWidth)) pt")
@@ -218,7 +230,7 @@ private struct AppearanceSettingsTab: View {
                             .frame(width: 44, alignment: .trailing)
                     }
                 }
-                LabeledContent("占屏高度") {
+                LabeledContent(L10n.t("占屏高度")) {
                     HStack(spacing: 8) {
                         Slider(value: $settings.drawerHeightRatio, in: DrawerLayout.minRatio...DrawerLayout.maxRatio)
                         Text("\(Int(settings.drawerHeightRatio * 100))%")
@@ -227,30 +239,30 @@ private struct AppearanceSettingsTab: View {
                             .frame(width: 44, alignment: .trailing)
                     }
                 }
-                Picker("垂直位置", selection: $settings.verticalAlignment) {
+                Picker(L10n.t("垂直位置"), selection: $settings.verticalAlignment) {
                     ForEach(DrawerVerticalAlignment.allCases) { alignment in
                         Text(alignment.label).tag(alignment)
                     }
                 }
-                Picker("停靠边缘", selection: $settings.edge) {
+                Picker(L10n.t("停靠边缘"), selection: $settings.edge) {
                     ForEach(DrawerEdge.allCases) { edge in
                         Text(edge.label).tag(edge)
                     }
                 }
-                Toggle("展开时停靠到鼠标所在屏幕", isOn: $settings.followMouseScreen)
+                Toggle(L10n.t("展开时停靠到鼠标所在屏幕"), isOn: $settings.followMouseScreen)
                     .help("多显示器：在哪块屏展开就贴哪块屏；关闭则始终主屏幕")
             }
-            Section("材质与列表") {
-                Picker("毛玻璃浓度", selection: $settings.material) {
+            Section(L10n.t("材质与列表")) {
+                Picker(L10n.t("毛玻璃浓度"), selection: $settings.material) {
                     ForEach(DrawerMaterial.allCases) { material in
                         Text(material.label).tag(material)
                     }
                 }
-                Toggle("紧凑列表", isOn: $settings.compactRows)
+                Toggle(L10n.t("紧凑列表"), isOn: $settings.compactRows)
                     .help("更小的瓷片与行距，同屏容纳更多条目")
-                Toggle("显示文件大小", isOn: $settings.showFileSize)
-                Toggle("显示加入时间", isOn: $settings.showAddedTime)
-                Toggle("显示缩略图（图片 / 视频 / PDF）", isOn: $settings.showThumbnails)
+                Toggle(L10n.t("显示文件大小"), isOn: $settings.showFileSize)
+                Toggle(L10n.t("显示加入时间"), isOn: $settings.showAddedTime)
+                Toggle(L10n.t("显示缩略图（图片 / 视频 / PDF）"), isOn: $settings.showThumbnails)
                     .help("关闭后统一显示类型符号")
             }
         }
@@ -266,26 +278,26 @@ private struct BehaviorSettingsTab: View {
 
     var body: some View {
         Form {
-            Section("拖放") {
-                Toggle("文件拖到边条上时自动展开", isOn: $settings.expandOnDragHover)
-                Text("关闭后，收起状态下需先点开边条再拖入文件。")
+            Section(L10n.t("拖放")) {
+                Toggle(L10n.t("文件拖到边条上时自动展开"), isOn: $settings.expandOnDragHover)
+                Text(L10n.t("关闭后，收起状态下需先点开边条再拖入文件。"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                Toggle("拖出文件后自动收起", isOn: $settings.collapseAfterDragOut)
-                Text("把条目拖离抽屉、拖拽结束后抽屉滑回收起边条。")
+                Toggle(L10n.t("拖出文件后自动收起"), isOn: $settings.collapseAfterDragOut)
+                Text(L10n.t("把条目拖离抽屉、拖拽结束后抽屉滑回收起边条。"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            Section("窗口") {
-                Toggle("切换到其他应用时自动收起", isOn: $settings.autoCollapseOnBlur)
-                Toggle("清空抽屉后自动收起", isOn: $settings.collapseWhenEmpty)
-                Picker("面板层级", selection: $settings.panelLevel) {
+            Section(L10n.t("窗口")) {
+                Toggle(L10n.t("切换到其他应用时自动收起"), isOn: $settings.autoCollapseOnBlur)
+                Toggle(L10n.t("清空抽屉后自动收起"), isOn: $settings.collapseWhenEmpty)
+                Picker(L10n.t("面板层级"), selection: $settings.panelLevel) {
                     ForEach(DrawerPanelLevel.allCases) { level in
                         Text(level.label).tag(level)
                     }
                 }
-                Toggle("在 Dock 中显示图标", isOn: $settings.showDockIcon)
-                Text("关闭后仅保留菜单栏图标（菜单栏 → 设置… 可随时恢复）。")
+                Toggle(L10n.t("在 Dock 中显示图标"), isOn: $settings.showDockIcon)
+                Text(L10n.t("关闭后仅保留菜单栏图标（菜单栏 → 设置… 可随时恢复）。"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -303,10 +315,10 @@ private struct ShortcutSettingsTab: View {
 
     var body: some View {
         Form {
-            Section("全局热键") {
-                Toggle("启用全局热键", isOn: $settings.hotKeyEnabled)
+            Section(L10n.t("全局热键")) {
+                Toggle(L10n.t("启用全局热键"), isOn: $settings.hotKeyEnabled)
                 if settings.hotKeyEnabled {
-                    LabeledContent("热键") {
+                    LabeledContent(L10n.t("热键")) {
                         HotKeyRecorderControl(label: settings.hotKeyLabel, recording: $recording) { event in
                             guard event.keyCode != 53 else { return } // Esc = 取消录制
                             let flags = event.modifierFlags.intersection([.command, .option, .control, .shift])
@@ -316,13 +328,13 @@ private struct ShortcutSettingsTab: View {
                             settings.hotKeyBinding = binding
                         }
                     }
-                    Button("恢复默认（⌥ Space）") {
+                    Button(L10n.t("恢复默认（⌥ Space）")) {
                         settings.hotKeyBinding = HotKeyBinding(keyCode: 49, modifiers: [.option])
                     }
                 }
             }
             Section {
-                Text("热键在任意应用前台时都能展开 / 收起抽屉。组合必须包含 ⌘、⌥ 或 ⌃ 修饰键，点击右侧按键框后按下新组合即可录制。抽屉内另有 ⌘F 搜索、⌘A 全选、⌘1–⌘9 切换分组、⌘↑⌘↓ 调整顺序等快捷键。")
+                Text(L10n.t("热键在任意应用前台时都能展开 / 收起抽屉。组合必须包含 ⌘、⌥ 或 ⌃ 修饰键，点击右侧按键框后按下新组合即可录制。") + " ⌘F · ⌘A · ⌘1–⌘9 · ⌘↑⌘↓")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

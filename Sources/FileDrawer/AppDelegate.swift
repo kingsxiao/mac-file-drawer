@@ -59,7 +59,7 @@ final class KeyboardRouter {
             guard !targets.isEmpty else { return event }
             ClipboardSupport.copyFiles(targets)
             if targets.count > 1 {
-                store.postNotice("已拷贝 \(targets.count) 个文件")
+                store.postNotice(L10n.tf("已拷贝 %d 个文件", targets.count))
             }
             return nil
         }
@@ -193,7 +193,7 @@ final class KeyboardRouter {
         withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) {
             let result = store.add(urls: urls)
             if result.skippedDuplicates > 0 {
-                store.postNotice("已跳过 \(result.skippedDuplicates) 个重复条目")
+                store.postNotice(L10n.tf("已跳过 %d 个重复条目", result.skippedDuplicates))
             }
         }
     }
@@ -356,6 +356,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// 把当前设置应用到窗口（外观 / 层级 / 热键 / 贴边几何 / Dock 图标）
     private func applySettings() {
         guard panel != nil else { return }
+        // 界面语言变化：重建抽屉视图 / 主菜单 / 菜单栏菜单（设置窗口下次打开自然用新语言）
+        if L10n.setLanguage(settings.language.code) {
+            rebuildUserInterface()
+        }
         panel.appearance = settings.appearance.nsAppearance
         panel.level = settings.panelLevel.nsLevel
         // 只有真的变化才切激活策略：反复 set 同值会闪 Dock 图标
@@ -367,6 +371,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.toggleCollapseOrExpand()
         }
         repositionPanel()
+    }
+
+    /// 语言切换后重建界面承载的视图与静态菜单
+    private func rebuildUserInterface() {
+        let store = ShelfStore.shared
+        if let hosting = panel.contentView as? NSHostingView<ContentView> {
+            hosting.rootView = ContentView(store: store, interaction: .shared)
+        }
+        buildMainMenu()
+        if let menu = statusItem.menu { populateStatusMenu(menu) }
+        SettingsWindowManager.shared.refreshLocalization()
     }
 
     /// 按当前状态（展开 / 收起 / 屏幕外）立即贴边定位
@@ -411,11 +426,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// 填充菜单栏菜单（每次打开时原地重建：切换项文案 + 最近条目列表保持最新）
     private func populateStatusMenu(_ menu: NSMenu) {
         menu.removeAllItems()
-        menu.addItem(withTitle: "显示 / 隐藏抽屉", action: #selector(toggleAction), keyEquivalent: "")
+        menu.addItem(withTitle: L10n.t("显示 / 隐藏抽屉"), action: #selector(toggleAction), keyEquivalent: "")
         menu.addItem(.separator())
-        menu.addItem(withTitle: "导入文件…", action: #selector(importAction), keyEquivalent: "")
-        menu.addItem(withTitle: "导出当前分组到文件夹…", action: #selector(exportAllAction), keyEquivalent: "")
-        menu.addItem(withTitle: "清空当前分组", action: #selector(clearAction), keyEquivalent: "")
+        menu.addItem(withTitle: L10n.t("导入文件…"), action: #selector(importAction), keyEquivalent: "")
+        menu.addItem(withTitle: L10n.t("导出当前分组到文件夹…"), action: #selector(exportAllAction), keyEquivalent: "")
+        menu.addItem(withTitle: L10n.t("清空当前分组"), action: #selector(clearAction), keyEquivalent: "")
 
         // 最近条目：按加入时间倒序取前 6 个，点击直接打开
         let recents = Array(
@@ -425,7 +440,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         if !recents.isEmpty {
             menu.addItem(.separator())
-            let header = menu.addItem(withTitle: "最近条目", action: nil, keyEquivalent: "")
+            let header = menu.addItem(withTitle: L10n.t("最近条目"), action: nil, keyEquivalent: "")
             header.isEnabled = false
             for item in recents {
                 let menuItem = menu.addItem(
@@ -438,29 +453,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         menu.addItem(.separator())
-        menu.addItem(withTitle: "设置…", action: #selector(settingsAction), keyEquivalent: ",")
+        menu.addItem(withTitle: L10n.t("设置…"), action: #selector(settingsAction), keyEquivalent: ",")
         menu.addItem(.separator())
-        menu.addItem(withTitle: "关于文件抽屉", action: #selector(aboutAction), keyEquivalent: "")
-        menu.addItem(withTitle: "退出文件抽屉", action: #selector(quitAction), keyEquivalent: "q")
+        menu.addItem(withTitle: L10n.t("关于文件抽屉"), action: #selector(aboutAction), keyEquivalent: "")
+        menu.addItem(withTitle: L10n.t("退出文件抽屉"), action: #selector(quitAction), keyEquivalent: "q")
     }
 
     /// 最小主菜单：让 ⌘,（设置）、⌘H / ⌘Q 等标准快捷键生效
     private func buildMainMenu() {
         let mainMenu = NSMenu()
 
-        let appMenuItem = NSMenuItem(title: "文件抽屉", action: nil, keyEquivalent: "")
+        let appMenuItem = NSMenuItem(title: L10n.t("文件抽屉"), action: nil, keyEquivalent: "")
         let appMenu = NSMenu()
-        appMenu.addItem(withTitle: "关于文件抽屉", action: #selector(aboutAction), keyEquivalent: "")
+        appMenu.addItem(withTitle: L10n.t("关于文件抽屉"), action: #selector(aboutAction), keyEquivalent: "")
         appMenu.addItem(.separator())
-        appMenu.addItem(withTitle: "设置…", action: #selector(settingsAction), keyEquivalent: ",")
+        appMenu.addItem(withTitle: L10n.t("设置…"), action: #selector(settingsAction), keyEquivalent: ",")
         appMenu.addItem(.separator())
         // 头部空间有限，导入 / 清空收进菜单（拖拽仍是放入文件的主方式）
-        appMenu.addItem(withTitle: "导入文件…", action: #selector(importAction), keyEquivalent: "o")
-        appMenu.addItem(withTitle: "清空当前分组", action: #selector(clearAction), keyEquivalent: "")
+        appMenu.addItem(withTitle: L10n.t("导入文件…"), action: #selector(importAction), keyEquivalent: "o")
+        appMenu.addItem(withTitle: L10n.t("清空当前分组"), action: #selector(clearAction), keyEquivalent: "")
         appMenu.addItem(.separator())
-        appMenu.addItem(withTitle: "隐藏文件抽屉", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
+        appMenu.addItem(withTitle: L10n.t("隐藏文件抽屉"), action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         let hideOthers = appMenu.addItem(
-            withTitle: "隐藏其他",
+            withTitle: L10n.t("隐藏其他"),
             action: #selector(NSApplication.hideOtherApplications(_:)),
             keyEquivalent: "h"
         )
@@ -470,12 +485,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appMenuItem.submenu = appMenu
         mainMenu.addItem(appMenuItem)
 
-        let editMenuItem = NSMenuItem(title: "编辑", action: nil, keyEquivalent: "")
+        let editMenuItem = NSMenuItem(title: L10n.t("编辑"), action: nil, keyEquivalent: "")
         let editMenu = NSMenu(title: "编辑")
-        editMenu.addItem(withTitle: "剪切", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
-        editMenu.addItem(withTitle: "拷贝", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
-        editMenu.addItem(withTitle: "粘贴", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
-        editMenu.addItem(withTitle: "全选", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        editMenu.addItem(withTitle: L10n.t("剪切"), action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        editMenu.addItem(withTitle: L10n.t("拷贝"), action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        editMenu.addItem(withTitle: L10n.t("粘贴"), action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        editMenu.addItem(withTitle: L10n.t("全选"), action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
         editMenuItem.submenu = editMenu
         mainMenu.addItem(editMenuItem)
 
@@ -524,8 +539,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         dlg.canChooseFiles = true
         dlg.canChooseDirectories = true
         dlg.allowsMultipleSelection = true
-        dlg.prompt = "放入抽屉"
-        dlg.message = "选择要放进抽屉的文件或文件夹"
+        dlg.prompt = L10n.t("放入抽屉")
+        dlg.message = L10n.t("选择要放进抽屉的文件或文件夹")
         if dlg.runModal() == .OK {
             withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) {
                 let result = ShelfStore.shared.add(urls: Array(dlg.urls))
@@ -563,8 +578,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         dlg.canChooseDirectories = true
         dlg.canCreateDirectories = true
         dlg.allowsMultipleSelection = false
-        dlg.prompt = "导出到这里"
-        dlg.message = "把「\(store.currentDrawerName)」分组的 \(store.currentItems.count) 个条目拷贝到所选文件夹"
+        dlg.prompt = L10n.t("导出到这里")
+        dlg.message = L10n.tf("把「%@」分组的 %d 个条目拷贝到所选文件夹", store.currentDrawerName, store.currentItems.count)
         guard dlg.runModal() == .OK, let folder = dlg.url else { return }
 
         // 大文件拷贝放后台，避免冻结主线程（弹簧动画 / 热键 / 菜单）
@@ -574,10 +589,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             await MainActor.run {
                 let alert = NSAlert()
                 alert.alertStyle = result.failed > 0 ? .warning : .informational
-                alert.messageText = "已导出 \(result.exported) 个条目"
+                alert.messageText = L10n.tf("已导出 %d 个条目", result.exported)
                 var details = [String]()
-                if result.skipped > 0 { details.append("\(result.skipped) 个失效条目已跳过") }
-                if result.failed > 0 { details.append("\(result.failed) 个拷贝失败") }
+                if result.skipped > 0 { details.append(L10n.tf("%d 个失效条目已跳过", result.skipped)) }
+                if result.failed > 0 { details.append(L10n.tf("%d 个拷贝失败", result.failed)) }
                 alert.informativeText = details.joined(separator: "，")
                 alert.runModal()
             }
@@ -610,7 +625,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             expandDrawer()
             let result = DrawerCommands.add(paths: paths, group: group)
             if result.added == 0, result.invalid == paths.count, !paths.isEmpty {
-                ShelfStore.shared.postNotice("路径不存在，未放入抽屉")
+                ShelfStore.shared.postNotice(L10n.t("路径不存在，未放入抽屉"))
             }
 
         case .reveal(let path):

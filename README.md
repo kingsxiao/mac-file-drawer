@@ -200,6 +200,15 @@ Gatekeeper 拦一下：在访达里**右键 → 打开**放行，或先执行
 | 移除并反悔 | 悬停 ✕ / Delete 移除后，点底部提示条「还原」放回原位 |
 | 清空 | 菜单栏图标 →「清空抽屉」（同样可「还原」） |
 
+## 界面语言（中 / 英）
+
+设置 → 外观 → **界面语言**：跟随系统 / 中文 / English，切换立即生效
+（抽屉、菜单栏、主菜单与设置面板即时重建，无需重启）。
+
+工程上的增量迁移方案：基准语言是中文，代码里的 key 即中文原文；
+英文翻译集中在 `Sources/FileDrawer/Resources/en.lproj/Localizable.strings`，
+未进表的字符串自动回退中文——永远不会因缺翻译出现 key 乱码，新文案可逐步补表。
+
 ## 性能
 
 `swift test` 内置度量基线（`PerformanceBaselineTests`，XCTest measure），覆盖热路径：

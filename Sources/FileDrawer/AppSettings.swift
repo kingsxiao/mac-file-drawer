@@ -13,9 +13,9 @@ enum DrawerAppearance: Int, CaseIterable, Identifiable {
 
     var label: String {
         switch self {
-        case .system: return "跟随系统"
-        case .light: return "浅色"
-        case .dark: return "深色"
+        case .system: return L10n.t("跟随系统")
+        case .light: return L10n.t("浅色")
+        case .dark: return L10n.t("深色")
         }
     }
 
@@ -38,9 +38,9 @@ enum DrawerVerticalAlignment: Int, CaseIterable, Identifiable {
 
     var label: String {
         switch self {
-        case .center: return "居中"
-        case .top: return "靠上"
-        case .bottom: return "靠下"
+        case .center: return L10n.t("居中")
+        case .top: return L10n.t("靠上")
+        case .bottom: return L10n.t("靠下")
         }
     }
 }
@@ -54,8 +54,8 @@ enum DrawerPanelLevel: Int, CaseIterable, Identifiable {
 
     var label: String {
         switch self {
-        case .floating: return "浮动在其他窗口之上"
-        case .normal: return "普通窗口层级"
+        case .floating: return L10n.t("浮动在其他窗口之上")
+        case .normal: return L10n.t("普通窗口层级")
         }
     }
 
@@ -78,10 +78,10 @@ enum DrawerMaterial: Int, CaseIterable, Identifiable {
 
     var label: String {
         switch self {
-        case .ultraThin: return "超薄"
-        case .thin: return "薄"
-        case .thick: return "厚"
-        case .ultraThick: return "超厚"
+        case .ultraThin: return L10n.t("超薄")
+        case .thin: return L10n.t("薄")
+        case .thick: return L10n.t("厚")
+        case .ultraThick: return L10n.t("超厚")
         }
     }
 
@@ -104,8 +104,8 @@ enum DrawerEdge: Int, CaseIterable, Identifiable {
 
     var label: String {
         switch self {
-        case .right: return "右侧"
-        case .left: return "左侧"
+        case .right: return L10n.t("右侧")
+        case .left: return L10n.t("左侧")
         }
     }
 }
@@ -121,10 +121,10 @@ enum AutoCleanPolicy: Int, CaseIterable, Identifiable {
 
     var label: String {
         switch self {
-        case .off: return "关闭"
-        case .oneDay: return "1 天后"
-        case .week: return "7 天后"
-        case .month: return "30 天后"
+        case .off: return L10n.t("关闭")
+        case .oneDay: return L10n.t("1 天后")
+        case .week: return L10n.t("7 天后")
+        case .month: return L10n.t("30 天后")
         }
     }
 
@@ -149,10 +149,10 @@ enum MaxItemsPolicy: Int, CaseIterable, Identifiable {
 
     var label: String {
         switch self {
-        case .unlimited: return "不限制"
-        case .m20: return "20 条"
-        case .m50: return "50 条"
-        case .m100: return "100 条"
+        case .unlimited: return L10n.t("不限制")
+        case .m20: return L10n.t("20 条")
+        case .m50: return L10n.t("50 条")
+        case .m100: return L10n.t("100 条")
         }
     }
 
@@ -162,6 +162,32 @@ enum MaxItemsPolicy: Int, CaseIterable, Identifiable {
         case .m20: return 20
         case .m50: return 50
         case .m100: return 100
+        }
+    }
+}
+
+/// 界面语言
+enum AppLanguage: Int, CaseIterable, Identifiable {
+    case system
+    case chinese
+    case english
+
+    var id: Int { rawValue }
+
+    var label: String {
+        switch self {
+        case .system: return L10n.t("跟随系统")
+        case .chinese: return "中文"
+        case .english: return "English"
+        }
+    }
+
+    /// 传给 L10n 的语言代码；nil = 跟随系统
+    var code: String? {
+        switch self {
+        case .system: return nil
+        case .chinese: return "zh-Hans"
+        case .english: return "en"
         }
     }
 }
@@ -243,6 +269,7 @@ final class AppSettings: ObservableObject {
         static let showDockIcon = prefix + "showDockIcon"
         static let followMouseScreen = prefix + "followMouseScreen"
         static let searchFileContents = prefix + "searchFileContents"
+        static let language = prefix + "language"
     }
 
     private let defaults: UserDefaults
@@ -325,6 +352,10 @@ final class AppSettings: ObservableObject {
     /// 搜索时也匹配文件内容（Spotlight kMDItemTextContent）
     @Published var searchFileContents: Bool {
         didSet { defaults.set(searchFileContents, forKey: Keys.searchFileContents) }
+    }
+    /// 界面语言
+    @Published var language: AppLanguage {
+        didSet { defaults.set(language.rawValue, forKey: Keys.language) }
     }
 
     // MARK: 交互
@@ -422,6 +453,7 @@ final class AppSettings: ObservableObject {
         showDockIcon = defaults.object(forKey: Keys.showDockIcon) as? Bool ?? true
         followMouseScreen = defaults.bool(forKey: Keys.followMouseScreen)
         searchFileContents = defaults.object(forKey: Keys.searchFileContents) as? Bool ?? true
+        language = AppLanguage(rawValue: defaults.integer(forKey: Keys.language)) ?? .system
         openOnSingleClick = defaults.bool(forKey: Keys.openOnSingleClick)
         collapseAfterDragOut = defaults.bool(forKey: Keys.collapseAfterDragOut)
         collapseWhenEmpty = defaults.bool(forKey: Keys.collapseWhenEmpty)

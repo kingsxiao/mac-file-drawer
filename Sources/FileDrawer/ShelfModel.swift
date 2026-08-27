@@ -287,7 +287,7 @@ final class ShelfStore: ObservableObject {
     func removeMissing() {
         let missing = items.filter { !FileManager.default.fileExists(atPath: $0.path) }
         guard !missing.isEmpty else { return }
-        recordRemoval(entries: missing.map(initRemovalEntry), summary: "已清理 \(missing.count) 个失效条目")
+        recordRemoval(entries: missing.map(initRemovalEntry), summary: L10n.tf("已清理 %d 个失效条目", missing.count))
         withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
             releaseAuxState(ids: Set(missing.map(\.id)), paths: Set(missing.map(\.path)))
             let missingIDs = Set(missing.map(\.id))
@@ -721,7 +721,7 @@ final class ShelfStore: ObservableObject {
     func clear() {
         let targets = currentItems
         guard !targets.isEmpty else { return }
-        recordRemoval(entries: targets.map(initRemovalEntry), summary: "已清空「\(currentDrawerName)」（\(targets.count) 个条目）")
+        recordRemoval(entries: targets.map(initRemovalEntry), summary: L10n.tf("已清空「%@」（%d 个条目）", currentDrawerName, targets.count))
         withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
             let ids = Set(targets.map(\.id))
             items.removeAll { ids.contains($0.id) }
@@ -741,8 +741,8 @@ final class ShelfStore: ObservableObject {
         undoSnapshot = RemovalSnapshot(
             entries: entries,
             summary: summary ?? (entries.count == 1
-                ? "已移除「\(entries[0].item.name)」"
-                : "已移除 \(entries.count) 个条目")
+                ? L10n.tf("已移除「%@」", entries[0].item.name)
+                : L10n.tf("已移除 %d 个条目", entries.count))
         )
         // 旧快照被顶掉：其收件箱文件不再受保护
         if previous != nil { settleInbox() }
@@ -945,7 +945,7 @@ final class ShelfStore: ObservableObject {
         var isDir: ObjCBool = false
         if FileManager.default.fileExists(atPath: path, isDirectory: &isDir), isDir.boolValue {
             let count = (try? FileManager.default.contentsOfDirectory(atPath: path))?.count ?? 0
-            return "\(count) 个项目"
+            return L10n.tf("%d 个项目", count)
         }
         let rawSize = (try? FileManager.default.attributesOfItem(atPath: path))?[.size]
         var value: Int64 = 0

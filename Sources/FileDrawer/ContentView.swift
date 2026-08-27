@@ -236,8 +236,8 @@ struct ContentView: View {
         }
         .animation(.easeOut(duration: 0.15), value: isDropTargeted)
         .animation(.spring(response: 0.28, dampingFraction: 0.7), value: handleHovered)
-        .help("收起成边条")
-        .accessibilityLabel("收起成边条")
+        .help(L10n.t("收起成边条"))
+        .accessibilityLabel(L10n.t("收起成边条"))
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: settings.edge == .right ? .leading : .trailing)
     }
 
@@ -449,7 +449,7 @@ private struct DrawerDropDelegate: DropDelegate {
             withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) {
                 let result = store.add(urls: urls)
                 if result.skippedDuplicates > 0 {
-                    store.postNotice("已跳过 \(result.skippedDuplicates) 个重复条目")
+                    store.postNotice(L10n.tf("已跳过 %d 个重复条目", result.skippedDuplicates))
                 }
             }
         }
@@ -499,7 +499,7 @@ private struct HeaderView: View {
             }
 
             if interaction.selectedIDs.count > 1 {
-                Text("已选 \(interaction.selectedIDs.count)")
+                Text(L10n.tf("已选 %d", interaction.selectedIDs.count))
                     .font(.system(size: 10, weight: .semibold, design: .monospaced))
                     .monospacedDigit()
                     .contentTransition(.numericText())
@@ -516,7 +516,7 @@ private struct HeaderView: View {
                 sortMenu
                 HoverCircleButton(
                     systemImage: "magnifyingglass",
-                    tip: "搜索（⌘F）",
+                    tip: L10n.t("搜索（⌘F）"),
                     size: 25,
                     tint: interaction.isSearchVisible ? DrawerTheme.accent : .secondary,
                     activeTint: DrawerTheme.accent,
@@ -526,12 +526,12 @@ private struct HeaderView: View {
                         interaction.requestSearchFocus()
                     }
                 }
-                HoverCircleButton(systemImage: "gearshape", tip: "设置（⌘,）", size: 25) {
+                HoverCircleButton(systemImage: "gearshape", tip: L10n.t("设置（⌘,）"), size: 25) {
                     SettingsWindowManager.shared.show()
                 }
                 HoverCircleButton(
                     systemImage: "arrow.right.to.line",
-                    tip: "收起成边条",
+                    tip: L10n.t("收起成边条"),
                     size: 25,
                     activeTint: DrawerTheme.accent,
                     activeFill: DrawerTheme.accent.opacity(0.12)
@@ -562,15 +562,15 @@ private struct HeaderView: View {
                 }
             }
             Divider()
-            Button("新建分组…") {
+            Button(L10n.t("新建分组…")) {
                 newDrawerName = ""
                 newDrawerVisible = true
             }
-            Button("重命名分组…") {
+            Button(L10n.t("重命名分组…")) {
                 renameDrawerName = store.currentDrawerName
                 renameDrawerVisible = true
             }
-            Button("删除分组", role: .destructive) {
+            Button(L10n.t("删除分组"), role: .destructive) {
                 // 删除当前分组：条目移到剩余第一个分组（最后一个不可删，按钮已禁用）
                 if !store.deleteDrawer(id: store.currentDrawerID) {
                     NSSound.beep()
@@ -592,24 +592,24 @@ private struct HeaderView: View {
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
         .fixedSize()
-        .help("切换 / 管理分组")
-        .alert("新建分组", isPresented: $newDrawerVisible) {
-            TextField("分组名", text: $newDrawerName)
-            Button("新建") {
+        .help(L10n.t("切换 / 管理分组"))
+        .alert(L10n.t("新建分组…"), isPresented: $newDrawerVisible) {
+            TextField(L10n.t("分组名"), text: $newDrawerName)
+            Button(L10n.t("新建")) {
                 if store.createDrawer(named: newDrawerName) == nil { NSSound.beep() }
             }
-            Button("取消", role: .cancel) {}
+            Button(L10n.t("取消"), role: .cancel) {}
         } message: {
-            Text("新建后自动切换过去；拖入 / 粘贴的文件会放进当前分组。")
+            Text(L10n.t("新建后自动切换过去；拖入 / 粘贴的文件会放进当前分组。"))
         }
         .alert("重命名「\(store.currentDrawerName)」", isPresented: $renameDrawerVisible) {
             TextField("分组名", text: $renameDrawerName)
-            Button("重命名") {
+            Button(L10n.t("重命名")) {
                 store.renameDrawer(id: store.currentDrawerID, to: renameDrawerName)
             }
             Button("取消", role: .cancel) {}
         } message: {
-            Text("与其他分组重名会被忽略。")
+            Text(L10n.t("与其他分组重名会被忽略。"))
         }
     }
 
@@ -647,7 +647,7 @@ private struct HeaderView: View {
             withAnimation(.easeOut(duration: 0.12)) { sortHovered = hovering }
             (hovering ? NSCursor.pointingHand : NSCursor.arrow).set()
         }
-        .help("排序（仅当前分组）")
+        .help(L10n.t("排序（仅当前分组）"))
     }
 }
 
@@ -742,13 +742,13 @@ private struct ItemRow: View {
             Spacer(minLength: 4)
 
             HStack(spacing: 1) {
-                rowAction("folder", "在访达中显示", delay: 0) {
+                rowAction("folder", L10n.t("在访达中显示"), delay: 0) {
                     NSWorkspace.shared.activateFileViewerSelecting([item.url])
                 }
-                rowAction("square.and.arrow.down", "另存为…", delay: 0.03) {
+                rowAction("square.and.arrow.down", L10n.t("另存为…"), delay: 0.03) {
                     exportItem()
                 }
-                rowAction("xmark", "从抽屉移除", delay: 0.06, tint: DrawerTheme.danger.opacity(0.9), activeTint: DrawerTheme.danger) {
+                rowAction("xmark", L10n.t("移除"), delay: 0.06, tint: DrawerTheme.danger.opacity(0.9), activeTint: DrawerTheme.danger) {
                     removeSelf()
                 }
             }
@@ -785,7 +785,7 @@ private struct ItemRow: View {
                     ReorderDrag.register(provider, id: item.id)
                     return provider
                 }
-                .help("拖动调整顺序（自动切入手动顺序；拖出抽屉外 = 拷贝文件）")
+                .help(L10n.t("拖动调整顺序（自动切入手动顺序；拖出抽屉外 = 拷贝文件）"))
                 .offset(x: -1)
         }
         // 选中指示条：前缘的品牌渐变小胶囊，随选中状态弹性伸缩
@@ -883,16 +883,16 @@ private struct ItemRow: View {
         .help(settings.openOnSingleClick
               ? "单击打开 · ⌘点击多选 · 空格预览 · Delete 移除"
               : "单击选中 · ⌘/⇧点击多选 · 双击打开 · 空格预览 · Delete 移除")
-        .alert("重命名「\(item.name)」", isPresented: $renameVisible) {
-            TextField("新名称", text: $renameText)
-            Button("重命名") {
+        .alert(L10n.tf("重命名「%@」", item.name), isPresented: $renameVisible) {
+            TextField(L10n.t("新名称"), text: $renameText)
+            Button(L10n.t("重命名")) {
                 if !store.rename(id: item.id, to: renameText) {
                     NSSound.beep()
                 }
             }
             Button("取消", role: .cancel) {}
         } message: {
-            Text("将同时修改磁盘上的文件；同名文件会自动追加序号。")
+            Text(L10n.t("将同时修改磁盘上的文件；同名文件会自动追加序号。"))
         }
         .onAppear {
             store.ensureThumb(for: item)
@@ -931,7 +931,7 @@ private struct ItemRow: View {
                         .background(Circle().fill(DrawerTheme.accentGradient))
                         .overlay(Circle().strokeBorder(.white.opacity(0.45), lineWidth: 0.6))
                         .offset(x: -3, y: -3)
-                        .help("已置顶 · 免于自动清理")
+                        .help(L10n.t("已置顶 · 免于自动清理"))
                 }
             }
             // 多选时瓷片变成整批拖拽把手：拖它 = 拖出全部选中条目
@@ -949,7 +949,7 @@ private struct ItemRow: View {
                     }
                 )
             }
-            .help(batchDragTargets.isEmpty ? "" : "拖动瓷片可拖出整批（\(batchDragTargets.count) 个）")
+            .help(batchDragTargets.isEmpty ? "" : L10n.tf("拖动瓷片可拖出整批（%d 个）", batchDragTargets.count))
             .scaleEffect(hovered ? 1.07 : 1)
             .animation(.spring(response: 0.28, dampingFraction: 0.6), value: hovered)
     }
@@ -962,8 +962,8 @@ private struct ItemRow: View {
     /// 元信息行文案：失效 / 内容命中时加前缀标注
     private var displayMeta: String {
         var parts: [String] = []
-        if isContentMatch { parts.append("内容匹配") }
-        if isMissing { parts.append("文件已不存在") }
+        if isContentMatch { parts.append(L10n.t("内容匹配")) }
+        if isMissing { parts.append(L10n.t("文件已不存在")) }
         if !metaLine.isEmpty { parts.append(metaLine) }
         return parts.joined(separator: " · ")
     }
@@ -985,7 +985,7 @@ private struct ItemRow: View {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .font(.system(size: 9, weight: .semibold))
                     .foregroundStyle(DrawerTheme.danger)
-                    .help("文件已不存在")
+                    .help(L10n.t("文件已不存在"))
             }
         }
     }
@@ -1042,13 +1042,13 @@ private struct ItemRow: View {
 
     /// 多选时给菜单项标注数量的后缀
     private func countSuffix(_ targets: [ShelfItem]) -> String {
-        targets.count > 1 ? "（\(targets.count) 个）" : ""
+        targets.count > 1 ? L10n.tf("（%d 个）", targets.count) : ""
     }
 
     @ViewBuilder
     private var rowContextMenu: some View {
         let targets = menuTargets
-        Button("打开\(countSuffix(targets))") {
+        Button(L10n.t("打开") + countSuffix(targets)) {
             let openable = targets.filter { !store.missingIDs.contains($0.id) }
             if openable.count < targets.count { NSSound.beep() }
             for target in openable { NSWorkspace.shared.open(target.url) }
@@ -1056,22 +1056,22 @@ private struct ItemRow: View {
         if !isMissing, targets.count == 1 {
             openWithMenu
         }
-        Button("快速预览") { interaction.togglePreview(for: item) }
-        Button("在访达中显示\(countSuffix(targets))") {
+        Button(L10n.t("快速预览")) { interaction.togglePreview(for: item) }
+        Button(L10n.t("在访达中显示") + countSuffix(targets)) {
             NSWorkspace.shared.activateFileViewerSelecting(targets.map(\.url))
         }
         Divider()
-        Button(targets.allSatisfy(\.pinned) ? "取消置顶\(countSuffix(targets))" : "置顶\(countSuffix(targets))") {
+        Button(targets.allSatisfy(\.pinned) ? L10n.t("取消置顶") + countSuffix(targets) : L10n.t("置顶") + countSuffix(targets)) {
             store.togglePinned(for: targets)
         }
-        Menu("调整顺序") {
-            Button("移到最前") { reorderTargets(targets, sendToFront: true) }
-            Button("上移") { reorderTargets(targets, nudge: -1) }
-            Button("下移") { reorderTargets(targets, nudge: 1) }
-            Button("移到最后") { reorderTargets(targets, sendToFront: false) }
+        Menu(L10n.t("调整顺序")) {
+            Button(L10n.t("移到最前")) { reorderTargets(targets, sendToFront: true) }
+            Button(L10n.t("上移")) { reorderTargets(targets, nudge: -1) }
+            Button(L10n.t("下移")) { reorderTargets(targets, nudge: 1) }
+            Button(L10n.t("移到最后")) { reorderTargets(targets, sendToFront: false) }
         }
         if store.drawers.count > 1 {
-            Menu("移动到分组\(countSuffix(targets))") {
+            Menu(L10n.t("移动到分组") + countSuffix(targets)) {
                 ForEach(store.drawers.filter { $0.id != store.currentDrawerID }) { group in
                     Button("\(group.name)（\(store.itemCount(in: group.id))）") {
                         store.moveItems(ids: targets.map(\.id), to: group.id)
@@ -1080,18 +1080,18 @@ private struct ItemRow: View {
             }
         }
         Divider()
-        Button("拷贝文件\(countSuffix(targets))") { ClipboardSupport.copyFiles(targets) }
-        Button("拷贝路径\(countSuffix(targets))") { copyPaths(targets) }
-        Button("移动到文件夹…\(countSuffix(targets))") { moveToFolder(targets) }
+        Button(L10n.t("拷贝文件") + countSuffix(targets)) { ClipboardSupport.copyFiles(targets) }
+        Button(L10n.t("拷贝路径") + countSuffix(targets)) { copyPaths(targets) }
+        Button(L10n.t("移动到文件夹…") + countSuffix(targets)) { moveToFolder(targets) }
         if targets.count == 1 {
-            Button("重命名…") {
+            Button(L10n.t("重命名…")) {
                 renameText = item.name
                 renameVisible = true
             }
-            Button("另存为…") { exportItem() }
+            Button(L10n.t("另存为…")) { exportItem() }
         }
         Divider()
-        Button("移除\(countSuffix(targets))", role: .destructive) {
+        Button(L10n.t("移除") + countSuffix(targets), role: .destructive) {
             removeTargets(targets)
         }
     }
@@ -1114,7 +1114,7 @@ private struct ItemRow: View {
     @ViewBuilder
     private var openWithMenu: some View {
         let apps = OpenWithCatalog.apps(for: item.url)
-        Menu("打开方式") {
+        Menu(L10n.t("打开方式")) {
             ForEach(apps, id: \.url.absoluteString) { app in
                 Button(app.name) {
                     OpenWithCatalog.open(item.url, withApplicationAt: app.url)
@@ -1146,10 +1146,10 @@ private struct ItemRow: View {
         dlg.canChooseDirectories = true
         dlg.canCreateDirectories = true
         dlg.allowsMultipleSelection = false
-        dlg.prompt = "移动到这里"
+        dlg.prompt = L10n.t("移动到这里")
         dlg.message = targets.count == 1
-            ? "把「\(item.name)」移动到所选文件夹"
-            : "把 \(targets.count) 个条目移动到所选文件夹"
+            ? L10n.tf("把「%@」移动到所选文件夹", item.name)
+            : L10n.tf("把 %d 个条目移动到所选文件夹", targets.count)
         guard dlg.runModal() == .OK, let folder = dlg.url else { return }
 
         var moved: [(id: UUID, destination: URL)] = []
@@ -1172,7 +1172,7 @@ private struct ItemRow: View {
         }
         if !failures.isEmpty {
             let alert = NSAlert()
-            alert.messageText = "\(failures.count) 个条目移动失败"
+            alert.messageText = L10n.tf("%d 个条目移动失败", failures.count)
             alert.informativeText = failures.map(\.localizedDescription).joined(separator: "\n")
             alert.runModal()
         }
@@ -1363,8 +1363,8 @@ private struct CollapsedTabView: View {
                 interaction.isCollapsed = false
             }
         }
-        .help("展开抽屉")
-        .accessibilityLabel("展开抽屉")
+        .help(L10n.t("展开抽屉"))
+        .accessibilityLabel(L10n.t("展开抽屉"))
         .accessibilityAddTraits(.isButton)
     }
 }
@@ -1384,7 +1384,7 @@ private struct SearchBarView: View {
 
             ZStack(alignment: .leading) {
                 if interaction.searchText.isEmpty {
-                    Text("搜索名称或 kind:图片")
+                    Text(L10n.t("搜索名称或 kind:图片"))
                         .font(.system(size: 12.5))
                         .foregroundStyle(.tertiary)
                         .allowsHitTesting(false)
@@ -1406,7 +1406,7 @@ private struct SearchBarView: View {
                 .transition(.scale.combined(with: .opacity))
             }
 
-            HoverCircleButton(systemImage: "xmark", tip: "关闭搜索", size: 18) {
+            HoverCircleButton(systemImage: "xmark", tip: L10n.t("关闭搜索"), size: 18) {
                 withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
                     interaction.clearSearchAndHideIfNeeded()
                 }
@@ -1449,11 +1449,11 @@ private struct NoResultsView: View {
                 .font(.system(size: 22, weight: .light))
                 .foregroundStyle(DrawerTheme.accent.opacity(0.55))
                 .symbolEffect(.bounce, options: .nonRepeating, value: query)
-            Text("没有匹配「\(query)」的条目")
+            Text(L10n.tf("没有匹配「%@」的条目", query))
                 .font(.system(size: 12, weight: .medium))
 
             Button(action: clearAction) {
-                Text("清除搜索")
+                Text(L10n.t("清除搜索"))
                     .font(.system(size: 11, weight: .medium))
                     .padding(.horizontal, 12)
                     .padding(.vertical, 4.5)
@@ -1492,7 +1492,7 @@ private struct UndoToastView: View {
                 .lineLimit(1)
 
             Button(action: onUndo) {
-                Text("还原")
+                Text(L10n.t("还原"))
                     .font(.system(size: 11.5, weight: .semibold))
                     .foregroundStyle(Color.white)
                     .padding(.horizontal, 9)
@@ -1831,13 +1831,13 @@ struct EmptyStateView: View {
                 .offset(y: drift)
 
                 VStack(spacing: 5) {
-                    Text(isTargeted ? "松开，放进抽屉" : "把文件放进来")
+                    Text(isTargeted ? L10n.t("松开，放进抽屉") : L10n.t("把文件放进来"))
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(isTargeted ? DrawerTheme.accent : Color.primary.opacity(0.85))
 
                     Text(isTargeted
-                         ? "支持一次拖入多个文件"
-                         : "从访达拖入文件、文件夹或链接\n也可以直接拖入一段文本 · ⌘V 粘贴")
+                         ? L10n.t("支持一次拖入多个文件")
+                         : L10n.t("从访达拖入文件、文件夹或链接\n也可以直接拖入一段文本 · ⌘V 粘贴"))
                         .font(.system(size: 11.5))
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)

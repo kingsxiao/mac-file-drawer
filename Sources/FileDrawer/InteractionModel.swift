@@ -18,11 +18,11 @@ final class InteractionModel: ObservableObject {
 
         var label: String {
             switch self {
-            case .timeNewestFirst: return "最近加入在前"
-            case .timeOldestFirst: return "最早加入在前"
-            case .nameAscending:   return "按名称 A–Z"
-            case .kindThenName:    return "按类型分组"
-            case .manual:          return "手动顺序"
+            case .timeNewestFirst: return L10n.t("最近加入在前")
+            case .timeOldestFirst: return L10n.t("最早加入在前")
+            case .nameAscending:   return L10n.t("按名称 A–Z")
+            case .kindThenName:    return L10n.t("按类型分组")
+            case .manual:          return L10n.t("手动顺序")
             }
         }
 

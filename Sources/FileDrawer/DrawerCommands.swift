@@ -29,8 +29,8 @@ enum DrawerCommands {
             skipped = result.skippedDuplicates
         }
         var notes: [String] = []
-        if skipped > 0 { notes.append("已跳过 \(skipped) 个重复条目") }
-        if invalid > 0 { notes.append("\(invalid) 个路径不存在") }
+        if skipped > 0 { notes.append(L10n.tf("已跳过 %d 个重复条目", skipped)) }
+        if invalid > 0 { notes.append(L10n.tf("%d 个路径不存在", invalid)) }
         if !notes.isEmpty { store.postNotice(notes.joined(separator: "，")) }
         return (added, skipped, invalid)
     }

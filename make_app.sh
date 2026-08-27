@@ -8,7 +8,7 @@ cd "$(dirname "$0")"
 
 # 版本号唯一来源：发版只改这两行（关于面板、DMG 文件名都从产物里读）
 VERSION="1.5.0"
-BUILD="8"
+BUILD="9"
 
 # 工具链探测：已设置 DEVELOPER_DIR 则尊重；否则优先完整版 Xcode；都没有就用 xcode-select 当前选择（纯 CLT 也能编译本项目）
 if [[ -z "$DEVELOPER_DIR" && -d /Applications/Xcode.app/Contents/Developer ]]; then
@@ -40,6 +40,15 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
 cp "$BIN" "$APP/Contents/MacOS/FileDrawer"
 cp "Assets/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
+
+# SPM 资源 bundle（本地化表等）：存在则随包分发，Bundle.module 会从主包 Resources 解析
+RES_BUNDLE=".build/release/FileDrawer_FileDrawer.bundle"
+if (( UNIVERSAL )) && [[ -d ".build/apple/Products/Release/FileDrawer_FileDrawer.bundle" ]]; then
+  RES_BUNDLE=".build/apple/Products/Release/FileDrawer_FileDrawer.bundle"
+fi
+if [[ -d "$RES_BUNDLE" ]]; then
+  cp -R "$RES_BUNDLE" "$APP/Contents/Resources/"
+fi
 
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
