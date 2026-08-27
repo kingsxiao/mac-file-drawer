@@ -32,6 +32,20 @@ enum ShelfPersistence {
             self.currentDrawerID = currentDrawerID
             self.drawerLimits = drawerLimits
         }
+
+        /// 旧 v3 数据无 drawerLimits 字段 → 默认空（decodeIfPresent 回退）
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            version = try c.decode(Int.self, forKey: .version)
+            items = try c.decode([ShelfItem].self, forKey: .items)
+            drawers = try c.decode([DrawerGroup].self, forKey: .drawers)
+            currentDrawerID = try c.decode(UUID.self, forKey: .currentDrawerID)
+            drawerLimits = try c.decodeIfPresent([String: Int].self, forKey: .drawerLimits) ?? [:]
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case version, items, drawers, currentDrawerID, drawerLimits
+        }
     }
 
     // MARK: 读写
