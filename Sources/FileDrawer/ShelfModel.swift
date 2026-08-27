@@ -520,6 +520,9 @@ final class ShelfStore: ObservableObject {
             }
         }
         if currentDrawerID == id { currentDrawerID = survivor }
+        // 清掉该分组的孤儿覆盖（容量上限 + 每组排序），避免 UUID→策略映射永久累积
+        drawerLimitOverrides.removeValue(forKey: id)
+        InteractionModel.shared.resetSortMode(for: id)
         return true
     }
 
