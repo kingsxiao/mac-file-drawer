@@ -115,7 +115,7 @@ private struct GeneralSettingsTab: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Toggle(L10n.t("搜索时也匹配文件内容（Spotlight）"), isOn: $settings.searchFileContents)
-                    .help("名称没命中时，用 Spotlight 检索文件内容补充结果；被索引过的文档 / 文本才有效")
+                    .help(L10n.t("名称没命中时，用 Spotlight 检索文件内容补充结果；被索引过的文档 / 文本才有效"))
                 Toggle(L10n.t("单击直接打开"), isOn: $settings.openOnSingleClick)
                 Text(L10n.t("开启后单击条目即打开文件；默认单击选中、双击打开（⌘/⇧点击可多选）。"))
                     .font(.caption)
@@ -208,7 +208,7 @@ private struct AppearanceSettingsTab: View {
     var body: some View {
         Form {
             Section(L10n.t("主题")) {
-                Picker("界面语言", selection: $settings.language) {
+                Picker(L10n.t("界面语言"), selection: $settings.language) {
                     ForEach(AppLanguage.allCases) { language in
                         Text(L10n.t(language.label)).tag(language)
                     }
@@ -250,7 +250,7 @@ private struct AppearanceSettingsTab: View {
                     }
                 }
                 Toggle(L10n.t("展开时停靠到鼠标所在屏幕"), isOn: $settings.followMouseScreen)
-                    .help("多显示器：在哪块屏展开就贴哪块屏；关闭则始终主屏幕")
+                    .help(L10n.t("多显示器：在哪块屏展开就贴哪块屏；关闭则始终主屏幕"))
             }
             Section(L10n.t("材质与列表")) {
                 Picker(L10n.t("毛玻璃浓度"), selection: $settings.material) {
@@ -259,11 +259,11 @@ private struct AppearanceSettingsTab: View {
                     }
                 }
                 Toggle(L10n.t("紧凑列表"), isOn: $settings.compactRows)
-                    .help("更小的瓷片与行距，同屏容纳更多条目")
+                    .help(L10n.t("更小的瓷片与行距，同屏容纳更多条目"))
                 Toggle(L10n.t("显示文件大小"), isOn: $settings.showFileSize)
                 Toggle(L10n.t("显示加入时间"), isOn: $settings.showAddedTime)
                 Toggle(L10n.t("显示缩略图（图片 / 视频 / PDF）"), isOn: $settings.showThumbnails)
-                    .help("关闭后统一显示类型符号")
+                    .help(L10n.t("关闭后统一显示类型符号"))
             }
         }
         .formStyle(.grouped)

@@ -423,7 +423,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let button = statusItem.button {
             button.image = NSImage(
                 systemSymbolName: "tray.full",
-                accessibilityDescription: "文件抽屉"
+                accessibilityDescription: L10n.t("文件抽屉")
             )
         }
         let menu = NSMenu()

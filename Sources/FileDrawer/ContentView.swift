@@ -603,7 +603,7 @@ private struct HeaderView: View {
             Text(L10n.t("新建后自动切换过去；拖入 / 粘贴的文件会放进当前分组。"))
         }
         .alert(L10n.tf("重命名「%@」", store.currentDrawerName), isPresented: $renameDrawerVisible) {
-            TextField("分组名", text: $renameDrawerName)
+            TextField(L10n.t("分组名"), text: $renameDrawerName)
             Button(L10n.t("重命名")) {
                 store.renameDrawer(id: store.currentDrawerID, to: renameDrawerName)
             }
@@ -1461,7 +1461,7 @@ private struct NoResultsView: View {
                     .foregroundStyle(DrawerTheme.accent)
             }
             .buttonStyle(PressScaleStyle(scale: 0.93))
-            .help("清除搜索")
+            .help(L10n.t("清除搜索"))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.bottom, 40)
@@ -1507,7 +1507,7 @@ private struct UndoToastView: View {
                     .foregroundStyle(.secondary)
             }
             .buttonStyle(PressScaleStyle(scale: 0.82))
-            .help("关闭")
+            .help(L10n.t("关闭"))
         }
         .padding(.horizontal, 11)
         .padding(.vertical, 7)

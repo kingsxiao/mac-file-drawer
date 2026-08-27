@@ -227,3 +227,7 @@
 "Swift + AppKit + SwiftUI · 无第三方依赖" = "Swift + AppKit + SwiftUI · zero third-party dependencies";
 "⌥Space 呼出抽屉 · 右键条目看全部操作" = "⌥Space toggles the drawer · right-click an item for all actions";
 "自动化：filedrawer:// URL 与快捷指令（Shortcuts）" = "Automation: filedrawer:// URLs and Shortcuts";
+
+/* 批次30 追加 */
+"键码 %d" = "Key code %d";
+"关闭" = "Close";

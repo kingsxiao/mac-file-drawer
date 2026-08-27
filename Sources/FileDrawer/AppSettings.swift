@@ -228,7 +228,7 @@ struct HotKeyBinding: Equatable {
     ]
 
     static func string(forKeyCode code: Int) -> String {
-        keyLabels[code] ?? "键码 \(code)"
+        keyLabels[code] ?? L10n.tf("键码 %d", code)
     }
 }
 
