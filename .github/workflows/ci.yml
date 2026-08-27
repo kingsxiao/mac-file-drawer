@@ -18,6 +18,16 @@ jobs:
       - name: Build
         run: swift build
 
+      - name: Zero-warning gate (release)
+        run: |
+          set -o pipefail
+          swift build -c release 2>&1 | tee /tmp/release-build.log
+          if grep -q "warning:" /tmp/release-build.log; then
+            echo "::error::Release build has compiler warnings (zero-warning gate failed)"
+            grep -n "warning:" /tmp/release-build.log || true
+            exit 1
+          fi
+
       - name: Test
         run: swift test
 

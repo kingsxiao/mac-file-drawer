@@ -25,7 +25,7 @@ enum LoginItemController {
 final class SettingsWindowManager {
     static let shared = SettingsWindowManager()
 
-    private var window: NSWindow?
+    private(set) var window: NSWindow?
 
     var isVisible: Bool { window?.isVisible ?? false }
 
@@ -41,11 +41,12 @@ final class SettingsWindowManager {
             // contentRect 与 SettingsView 的固定 frame 对齐，避免HostingView 留死边
             let w = NSWindow(
                 contentRect: NSRect(x: 0, y: 0, width: 480, height: 440),
-                styleMask: [.titled, .closable],
+                styleMask: [.titled, .closable, .miniaturizable, .resizable],
                 backing: .buffered,
                 defer: false
             )
             w.title = L10n.t("文件抽屉") + " · " + L10n.t("设置")
+            w.contentMinSize = NSSize(width: 460, height: 400)
             w.isReleasedWhenClosed = false
             w.contentView = NSHostingView(rootView: SettingsView())
             w.center()
@@ -70,7 +71,7 @@ struct SettingsView: View {
             ShortcutSettingsTab()
                 .tabItem { Label(L10n.t("快捷键"), systemImage: "keyboard") }
         }
-        .frame(width: 480, height: 440)
+        .frame(minWidth: 460, idealWidth: 480, minHeight: 400, idealHeight: 440)
     }
 }
 
