@@ -53,6 +53,7 @@ struct SettingsView: View {
 private struct GeneralSettingsTab: View {
     @ObservedObject private var settings = AppSettings.shared
     @ObservedObject private var interaction = InteractionModel.shared
+    @ObservedObject private var store = ShelfStore.shared
 
     var body: some View {
         Form {
@@ -71,6 +72,32 @@ private struct GeneralSettingsTab: View {
                     ForEach(InteractionModel.SortMode.allCases) { mode in
                         Text(mode.label).tag(mode)
                     }
+                }
+                Toggle("单击直接打开", isOn: $settings.openOnSingleClick)
+                Text("开启后单击条目即打开文件；默认单击选中、双击打开。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Section("暂存维护") {
+                Picker("自动清理过期条目", selection: $settings.autoClean) {
+                    ForEach(AutoCleanPolicy.allCases) { policy in
+                        Text(policy.label).tag(policy)
+                    }
+                }
+                Picker("容量上限", selection: $settings.maxItems) {
+                    ForEach(MaxItemsPolicy.allCases) { limit in
+                        Text(limit.label).tag(limit)
+                    }
+                }
+                Text("超出上限时淘汰最早加入的条目。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                LabeledContent("当前条目") {
+                    Text("\(store.items.count) 个")
+                        .foregroundStyle(.secondary)
+                }
+                Button("立即清理已不存在的条目") {
+                    store.removeMissing()
                 }
             }
         }
@@ -118,9 +145,23 @@ private struct AppearanceSettingsTab: View {
                         Text(alignment.label).tag(alignment)
                     }
                 }
+                Picker("停靠边缘", selection: $settings.edge) {
+                    ForEach(DrawerEdge.allCases) { edge in
+                        Text(edge.label).tag(edge)
+                    }
+                }
             }
-            Section("内容") {
-                Toggle("显示图片 / 视频缩略图", isOn: $settings.showThumbnails)
+            Section("材质与列表") {
+                Picker("毛玻璃浓度", selection: $settings.material) {
+                    ForEach(DrawerMaterial.allCases) { material in
+                        Text(material.label).tag(material)
+                    }
+                }
+                Toggle("紧凑列表", isOn: $settings.compactRows)
+                    .help("更小的瓷片与行距，同屏容纳更多条目")
+                Toggle("显示文件大小", isOn: $settings.showFileSize)
+                Toggle("显示加入时间", isOn: $settings.showAddedTime)
+                Toggle("显示缩略图（图片 / 视频 / PDF）", isOn: $settings.showThumbnails)
                     .help("关闭后统一显示类型符号")
             }
         }
@@ -141,9 +182,14 @@ private struct BehaviorSettingsTab: View {
                 Text("关闭后，收起状态下需先点开边条再拖入文件。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                Toggle("拖出文件后自动收起", isOn: $settings.collapseAfterDragOut)
+                Text("把条目拖离抽屉、拖拽结束后抽屉滑回收起边条。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             Section("窗口") {
                 Toggle("切换到其他应用时自动收起", isOn: $settings.autoCollapseOnBlur)
+                Toggle("清空抽屉后自动收起", isOn: $settings.collapseWhenEmpty)
                 Picker("面板层级", selection: $settings.panelLevel) {
                     ForEach(DrawerPanelLevel.allCases) { level in
                         Text(level.label).tag(level)

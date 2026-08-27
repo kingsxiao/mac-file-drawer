@@ -181,6 +181,16 @@ final class ThumbnailPipelineTests: XCTestCase {
         store.ensureThumb(for: added)
 
         XCTAssertTrue(waitUntil { self.store.thumbs[added.id] != nil }, "PDF 应渲染首页缩略图")
+
+        // 首页渲染应自带不透明白底：四角不透明，叠在彩色瓷片上才看得清
+        let thumb = try XCTUnwrap(store.thumbs[added.id])
+        let rep = try XCTUnwrap(NSBitmapImageRep(data: thumb.tiffRepresentation!))
+        let w = rep.pixelsWide, h = rep.pixelsHigh
+        XCTAssertGreaterThan(w, 0)
+        for point in [(0, 0), (w - 1, 0), (0, h - 1), (w - 1, h - 1)] {
+            let alpha = rep.colorAt(x: point.0, y: point.1)?.alphaComponent ?? 0
+            XCTAssertGreaterThanOrEqual(alpha, 0.9, "PDF 缩略图应是不透明渲染（角点 (\(point.0),\(point.1)) alpha=\(alpha)）")
+        }
     }
 
     // MARK: - 设置开关
