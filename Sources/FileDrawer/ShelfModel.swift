@@ -162,9 +162,16 @@ final class ShelfStore: ObservableObject {
     }
 
     func remove(_ item: ShelfItem) {
-        recordRemoval(entries: [initRemovalEntry(item)])
-        items.removeAll { $0.id == item.id }
-        releaseAuxState(ids: [item.id], paths: [item.path])
+        remove([item])
+    }
+
+    /// 批量移除（多选 Delete / 清理失效条目共用）：一次快照、一次落盘
+    func remove(_ targets: [ShelfItem]) {
+        guard !targets.isEmpty else { return }
+        recordRemoval(entries: targets.map(initRemovalEntry))
+        let ids = Set(targets.map(\.id))
+        items.removeAll { ids.contains($0.id) }
+        releaseAuxState(ids: ids, paths: Set(targets.map(\.path)))
     }
 
     /// 手动清理：丢弃硬盘上已不存在的条目（设置面板「立即清理」）

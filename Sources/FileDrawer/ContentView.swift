@@ -309,7 +309,7 @@ struct ContentView: View {
                             item: item,
                             store: store,
                             interaction: interaction,
-                            isSelected: interaction.selectedID == item.id,
+                            isSelected: interaction.selectedIDs.contains(item.id),
                             entranceIndex: index,
                             staggerEntrance: entranceWindowActive
                         )
@@ -413,6 +413,18 @@ private struct HeaderView: View {
                     .transition(.scale(scale: 0.6).combined(with: .opacity))
             }
 
+            if interaction.selectedIDs.count > 1 {
+                Text("已选 \(interaction.selectedIDs.count)")
+                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                    .monospacedDigit()
+                    .contentTransition(.numericText())
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Capsule().fill(DrawerTheme.accentGradient))
+                    .transition(.scale(scale: 0.6).combined(with: .opacity))
+            }
+
             Spacer(minLength: 4)
 
             HStack(spacing: 3) {
@@ -445,6 +457,7 @@ private struct HeaderView: View {
         }
         .padding(.vertical, 11)
         .animation(DrawerMotion.bouncy, value: store.items.count)
+        .animation(DrawerMotion.bouncy, value: interaction.selectedIDs.count)
     }
 
     private var sortMenu: some View {
@@ -650,25 +663,28 @@ private struct ItemRow: View {
             NSWorkspace.shared.open(item.url)
         }
         .onTapGesture {
-            if settings.openOnSingleClick {
+            // ⌘/⇧ 点击 = 多选（访达语义）；普通单击在「直接打开」设置下立即打开
+            let flags = NSEvent.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            if settings.openOnSingleClick, !flags.contains(.command), !flags.contains(.shift) {
                 selectRow()
                 NSWorkspace.shared.open(item.url)
-            } else {
-                selectRow()
+                return
+            }
+            DrawerPanel.active?.makeKeyAndOrderFront(nil)
+            withAnimation(.easeOut(duration: 0.15)) {
+                if flags.contains(.command) {
+                    interaction.toggleSelect(item)
+                } else if flags.contains(.shift) {
+                    interaction.extendSelection(
+                        to: item,
+                        within: interaction.displayItems(from: store.items)
+                    )
+                } else {
+                    interaction.select(item)
+                }
             }
         }
-        .contextMenu {
-            Button("打开") { NSWorkspace.shared.open(item.url) }
-            Button("快速预览") { interaction.togglePreview(for: item) }
-            Button("在访达中显示") { NSWorkspace.shared.activateFileViewerSelecting([item.url]) }
-            Divider()
-            Button("拷贝文件") { ClipboardSupport.copyFile(item) }
-            Button("拷贝路径") { copyPath() }
-            Button("移动到文件夹…") { moveToFolder() }
-            Button("另存为…") { exportItem() }
-            Divider()
-            Button("移除", role: .destructive) { removeSelf() }
-        }
+        .contextMenu { rowContextMenu }
         .onDrag {
             let provider = item.dragProvider()
             if settings.collapseAfterDragOut {
@@ -681,8 +697,8 @@ private struct ItemRow: View {
             return provider
         }
         .help(settings.openOnSingleClick
-              ? "单击打开 · 空格预览 · Delete 移除"
-              : "单击选中 · 双击打开 · 空格预览 · Delete 移除")
+              ? "单击打开 · ⌘点击多选 · 空格预览 · Delete 移除"
+              : "单击选中 · ⌘/⇧点击多选 · 双击打开 · 空格预览 · Delete 移除")
         .onAppear {
             store.ensureThumb(for: item)
             if isFreshArrival {
@@ -709,6 +725,42 @@ private struct ItemRow: View {
 
     private var metaLine: String { item.metaLine(settings: settings) }
 
+    /// 右键菜单操作目标：行在多选集合里 → 整个集合（访达语义）
+    private var menuTargets: [ShelfItem] {
+        interaction.selectionTargets(
+            containing: item,
+            in: interaction.displayItems(from: store.items)
+        )
+    }
+
+    /// 多选时给菜单项标注数量的后缀
+    private func countSuffix(_ targets: [ShelfItem]) -> String {
+        targets.count > 1 ? "（\(targets.count) 个）" : ""
+    }
+
+    @ViewBuilder
+    private var rowContextMenu: some View {
+        let targets = menuTargets
+        Button("打开\(countSuffix(targets))") {
+            for target in targets { NSWorkspace.shared.open(target.url) }
+        }
+        Button("快速预览") { interaction.togglePreview(for: item) }
+        Button("在访达中显示\(countSuffix(targets))") {
+            NSWorkspace.shared.activateFileViewerSelecting(targets.map(\.url))
+        }
+        Divider()
+        Button("拷贝文件\(countSuffix(targets))") { ClipboardSupport.copyFiles(targets) }
+        Button("拷贝路径\(countSuffix(targets))") { copyPaths(targets) }
+        Button("移动到文件夹…\(countSuffix(targets))") { moveToFolder(targets) }
+        if targets.count == 1 {
+            Button("另存为…") { exportItem() }
+        }
+        Divider()
+        Button("移除\(countSuffix(targets))", role: .destructive) {
+            removeTargets(targets)
+        }
+    }
+
     /// 单击行：选中 + 把非激活面板设为 key，让键盘导航（空格/↑↓）可用
     private func selectRow() {
         DrawerPanel.active?.makeKeyAndOrderFront(nil)
@@ -717,32 +769,50 @@ private struct ItemRow: View {
         }
     }
 
-    /// 拷贝 POSIX 路径到系统剪贴板
-    private func copyPath() {
+    /// 拷贝 POSIX 路径到系统剪贴板（多选时按行拼接）
+    private func copyPaths(_ targets: [ShelfItem]) {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
-        pasteboard.setString(item.path, forType: .string)
+        pasteboard.setString(targets.map(\.path).joined(separator: "\n"), forType: .string)
     }
 
-    /// 把文件移动到指定文件夹，条目改指新路径（暂存语义：文件跟着走）
-    private func moveToFolder() {
+    /// 把一批文件移动到指定文件夹（同名自动追加序号），条目改指新路径
+    private func moveToFolder(_ targets: [ShelfItem]) {
+        guard !targets.isEmpty else { return }
         let dlg = NSOpenPanel()
         dlg.canChooseFiles = false
         dlg.canChooseDirectories = true
         dlg.canCreateDirectories = true
         dlg.allowsMultipleSelection = false
         dlg.prompt = "移动到这里"
-        dlg.message = "把「\(item.name)」移动到所选文件夹"
+        dlg.message = targets.count == 1
+            ? "把「\(item.name)」移动到所选文件夹"
+            : "把 \(targets.count) 个条目移动到所选文件夹"
         guard dlg.runModal() == .OK, let folder = dlg.url else { return }
-        let destination = folder.appendingPathComponent(item.name)
-        guard !FileManager.default.fileExists(atPath: destination.path) else { return }
-        do {
-            try FileManager.default.moveItem(at: item.url, to: destination)
-            withAnimation(.spring(response: 0.32, dampingFraction: 0.8)) {
-                store.updatePath(id: item.id, to: destination)
+
+        var moved: [(id: UUID, destination: URL)] = []
+        var failures: [Error] = []
+        for target in targets {
+            let destination = InboxStore.uniqueSiblingURL(fileName: target.name, directory: folder)
+            do {
+                try FileManager.default.moveItem(at: target.url, to: destination)
+                moved.append((target.id, destination))
+            } catch {
+                failures.append(error)
             }
-        } catch {
-            NSAlert(error: error).runModal()
+        }
+        guard !moved.isEmpty else {
+            if let first = failures.first { NSAlert(error: first).runModal() }
+            return
+        }
+        withAnimation(.spring(response: 0.32, dampingFraction: 0.8)) {
+            for entry in moved { store.updatePath(id: entry.id, to: entry.destination) }
+        }
+        if !failures.isEmpty {
+            let alert = NSAlert()
+            alert.messageText = "\(failures.count) 个条目移动失败"
+            alert.informativeText = failures.map(\.localizedDescription).joined(separator: "\n")
+            alert.runModal()
         }
     }
 
@@ -821,8 +891,16 @@ private struct ItemRow: View {
     }
 
     private func removeSelf() {
+        // 行内 ✕ 与右键菜单同语义：行在多选集合里 → 整批移除（可整批还原）
+        removeTargets(interaction.selectionTargets(
+            containing: item,
+            in: interaction.displayItems(from: store.items)
+        ))
+    }
+
+    private func removeTargets(_ targets: [ShelfItem]) {
         withAnimation(.spring(response: 0.32, dampingFraction: 0.8)) {
-            store.remove(item)
+            store.remove(targets)
         }
     }
 }

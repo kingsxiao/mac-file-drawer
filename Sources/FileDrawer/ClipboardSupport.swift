@@ -11,9 +11,17 @@ enum ClipboardSupport {
     /// 把条目文件以「访达拷贝」的语义写入剪贴板
     @MainActor
     static func copyFile(_ item: ShelfItem) {
+        copyFiles([item])
+    }
+
+    /// 批量拷贝（多选 ⌘C）：一次写入多个文件，目标端按访达多选拷贝接收
+    @MainActor
+    static func copyFiles(_ items: [ShelfItem]) {
+        let urls = items.filter { FileManager.default.fileExists(atPath: $0.path) }.map(\.url)
+        guard !urls.isEmpty else { return }
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
-        pasteboard.writeObjects([item.url as NSURL])
+        pasteboard.writeObjects(urls as [NSURL])
     }
 
     /// 从任意剪贴板读出文件 URL（只认真实文件，忽略纯字符串）

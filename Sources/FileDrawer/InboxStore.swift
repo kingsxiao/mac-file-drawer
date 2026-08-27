@@ -119,6 +119,22 @@ enum InboxStore {
         return directory.appendingPathComponent(UUID().uuidString).appendingPathExtension(ext)
     }
 
+    /// 任意文件名（可无扩展名）在目标目录内的不冲突版本：已存在则追加 " 2"、" 3"…
+    static func uniqueSiblingURL(fileName: String, directory: URL) -> URL {
+        let fm = FileManager.default
+        let primary = directory.appendingPathComponent(fileName)
+        if !fm.fileExists(atPath: primary.path) { return primary }
+        let stem = (fileName as NSString).deletingPathExtension
+        let ext = (fileName as NSString).pathExtension
+        for n in 2...999 {
+            let candidate = directory.appendingPathComponent(
+                ext.isEmpty ? "\(stem) \(n)" : "\(stem) \(n).\(ext)"
+            )
+            if !fm.fileExists(atPath: candidate.path) { return candidate }
+        }
+        return directory.appendingPathComponent(UUID().uuidString)
+    }
+
     // MARK: 清扫
 
     /// 删除收件箱里不再被任何条目引用的文件（在撤销窗口结束后调用）

@@ -50,15 +50,21 @@ final class KeyboardRouter {
             model.requestSearchFocus()
             return nil
         }
-        // Cmd+C 拷贝选中条目的文件（与访达拷贝同构）
+        // Cmd+C 拷贝选中条目的文件（与访达拷贝同构；多选时全部拷贝）
         if flags == .command, event.keyCode == 8 { // C
-            guard let item = model.selectedItem(in: displayed) else { return event }
-            ClipboardSupport.copyFile(item)
+            let targets = model.selectedItems(in: displayed)
+            guard !targets.isEmpty else { return event }
+            ClipboardSupport.copyFiles(targets)
             return nil
         }
         // Cmd+V 把剪贴板里的文件 / 文本 / 链接放入抽屉
         if flags == .command, event.keyCode == 9 { // V
             pasteFromClipboard(store: store)
+            return nil
+        }
+        // Cmd+A 全选当前展示的条目
+        if flags == .command, event.keyCode == 0 { // A
+            model.selectAll(in: displayed)
             return nil
         }
 
@@ -120,16 +126,18 @@ final class KeyboardRouter {
             }
             return nil
 
-        case 36, 76: // Return / Enter：打开选中文件
-            if let item = model.selectedItem(in: displayed) {
-                NSWorkspace.shared.open(item.url)
+        case 36, 76: // Return / Enter：打开选中文件（多选时全部打开）
+            let targets = model.selectedItems(in: displayed)
+            if !targets.isEmpty {
+                for item in targets { NSWorkspace.shared.open(item.url) }
                 return nil
             }
 
-        case 51: // Delete：移除选中条目
-            if let item = model.selectedItem(in: displayed) {
+        case 51: // Delete：移除选中条目（多选时批量移除，可整批还原）
+            let targets = model.selectedItems(in: displayed)
+            if !targets.isEmpty {
                 withAnimation(.spring(response: 0.32, dampingFraction: 0.8)) {
-                    store.remove(item)
+                    store.remove(targets)
                 }
                 return nil
             }

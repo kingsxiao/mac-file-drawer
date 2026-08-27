@@ -46,8 +46,20 @@ final class InteractionModel: ObservableObject {
     @Published var sortMode: SortMode {
         didSet { UserDefaults.standard.set(sortMode.rawValue, forKey: Self.sortDefaultsKey) }
     }
-    /// 当前选中的条目（单击选中；空格预览、回车打开、方向键移动）
-    @Published var selectedID: UUID?
+    /// 多选集合：当前所有选中的条目；空 = 无选中
+    @Published var selectedIDs: Set<UUID> = []
+    /// 锚点：最近一次单击的条目（⇧ 点击的区间起点、空格预览 / 键盘导航的对象）。
+    /// 直接对它赋值会把多选收敛为单选（保持既有单选语义与测试兼容）。
+    @Published var selectedID: UUID? {
+        didSet {
+            guard oldValue != selectedID else { return }
+            if let id = selectedID {
+                if !selectedIDs.contains(id) { selectedIDs = [id] }
+            } else {
+                selectedIDs = []
+            }
+        }
+    }
     @Published var isPreviewVisible = false
     /// 收起态：抽屉缩成贴右缘的窄边条
     @Published var isCollapsed = false {
@@ -103,11 +115,61 @@ final class InteractionModel: ObservableObject {
         return displayed.first { $0.id == id }
     }
 
-    func select(_ item: ShelfItem?) {
-        selectedID = item?.id
+    /// 全部选中的条目（按展示顺序）
+    func selectedItems(in displayed: [ShelfItem]) -> [ShelfItem] {
+        guard !selectedIDs.isEmpty else { return [] }
+        return displayed.filter { selectedIDs.contains($0.id) }
     }
 
-    /// 方向键移动选中项；到达边界时停住。返回新的选中项。
+    func select(_ item: ShelfItem?) {
+        guard let item else {
+            selectedID = nil
+            return
+        }
+        selectedIDs = [item.id]
+        selectedID = item.id
+    }
+
+    /// ⌘点击：切换某条目的选中态，锚点跟随最后操作的条目
+    func toggleSelect(_ item: ShelfItem) {
+        if selectedIDs.contains(item.id) {
+            selectedIDs.remove(item.id)
+            if selectedID == item.id { selectedID = selectedIDs.first }
+        } else {
+            selectedIDs.insert(item.id)
+            selectedID = item.id
+        }
+    }
+
+    /// ⇧点击：选中锚点到该条目之间的连续区间（锚点保持不变）
+    func extendSelection(to item: ShelfItem, within displayed: [ShelfItem]) {
+        guard let anchorID = selectedID,
+              let anchorIndex = displayed.firstIndex(where: { $0.id == anchorID }),
+              let targetIndex = displayed.firstIndex(where: { $0.id == item.id }) else {
+            select(item)
+            return
+        }
+        selectedIDs = Set(displayed[min(anchorIndex, targetIndex)...max(anchorIndex, targetIndex)].map(\.id))
+    }
+
+    /// ⌘A：全选当前展示的条目；锚点尽量保持，否则落到第一条
+    func selectAll(in displayed: [ShelfItem]) {
+        selectedIDs = Set(displayed.map(\.id))
+        if let anchor = selectedID, !selectedIDs.contains(anchor) {
+            selectedID = displayed.first?.id
+        }
+    }
+
+    /// 右键菜单 / 行内按钮的操作目标：
+    /// 行本身在多选集合里 → 对整个集合生效（访达语义）；否则只有该行
+    func selectionTargets(containing item: ShelfItem, in all: [ShelfItem]) -> [ShelfItem] {
+        if selectedIDs.contains(item.id), selectedIDs.count > 1 {
+            return all.filter { selectedIDs.contains($0.id) }
+        }
+        return [item]
+    }
+
+    /// 方向键移动选中项；到达边界时停住。移动后收敛为单选。返回新的选中项。
     @discardableResult
     func moveSelection(by step: Int, within displayed: [ShelfItem]) -> ShelfItem? {
         guard !displayed.isEmpty else {
@@ -116,6 +178,9 @@ final class InteractionModel: ObservableObject {
         }
         let index = displayed.firstIndex { $0.id == selectedID } ?? (step > 0 ? -1 : displayed.count)
         let next = min(max(index + step, 0), displayed.count - 1)
+        // 键盘导航收敛为单选（访达语义）：先设集合再挪锚点，避免 didSet 的
+        // 「集合内锚点移动保持集合」分支把多选留下来
+        selectedIDs = [displayed[next].id]
         selectedID = displayed[next].id
         return displayed[next]
     }
@@ -150,8 +215,18 @@ final class InteractionModel: ObservableObject {
 
     /// 条目被移除后调用：选中/预览指向失效时自动收回。
     func reconcileAfterListChange(with displayed: [ShelfItem]) {
-        if let id = selectedID, !displayed.contains(where: { $0.id == id }) {
-            selectedID = displayed.first?.id
+        let visible = Set(displayed.map(\.id))
+        if !selectedIDs.isEmpty {
+            let trimmed = selectedIDs.intersection(visible)
+            if trimmed != selectedIDs { selectedIDs = trimmed }
+        }
+        if let id = selectedID, !visible.contains(id) {
+            // 锚点失效：多选集合还在就保持集合、把锚点挪到集合内第一条；否则单选第一条
+            if let fallback = selectedIDs.first {
+                selectedID = fallback
+            } else {
+                selectedID = displayed.first?.id
+            }
         }
         if isPreviewVisible && selectedItem(in: displayed) == nil {
             closePreview()
