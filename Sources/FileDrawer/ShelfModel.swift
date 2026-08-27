@@ -487,6 +487,7 @@ final class ShelfStore: ObservableObject {
 
     /// 行首次出现时调用；解码在后台线程进行，完成后自动刷新行。
     /// 条目在解码完成前被移除时，结果会被丢弃（孤儿回调守卫）。
+    /// 图片 / 视频 / PDF 先查磁盘缓存（按路径+mtime+大小指纹），未命中才解码。
     func ensureThumb(for item: ShelfItem) {
         guard AppSettings.shared.showThumbnails else { return }
         guard thumbs[item.id] == nil, thumbFailed.contains(item.id) == false else { return }
@@ -499,12 +500,36 @@ final class ShelfStore: ObservableObject {
         let id = item.id
         let url = item.url
         Task.detached(priority: .utility) {
+            // 磁盘缓存命中：直接用缓存图（视频抽帧 / PDF 渲染都省掉）
+            if let fingerprint = ThumbnailDiskCache.fingerprint(of: url),
+               let cached = ThumbnailDiskCache.image(
+                   forKey: ThumbnailDiskCache.makeKey(
+                       path: url.path,
+                       modifiedAt: fingerprint.modifiedAt,
+                       fileSize: fingerprint.fileSize
+                   )
+               ) {
+                await ShelfStore.shared.setThumb(cached, for: id)
+                return
+            }
             let image: NSImage?
             switch variant {
             case .image: image = Self.downsampledImage(url)
             case .video: image = Self.videoThumbnail(url)
             case .pdf:   image = Self.pdfThumbnail(url)
             default:     image = nil
+            }
+            // 解码成功顺手写回缓存（指纹失效场景下重写最新）
+            if let image, let fingerprint = ThumbnailDiskCache.fingerprint(of: url) {
+                ThumbnailDiskCache.store(
+                    image,
+                    forKey: ThumbnailDiskCache.makeKey(
+                        path: url.path,
+                        modifiedAt: fingerprint.modifiedAt,
+                        fileSize: fingerprint.fileSize
+                    )
+                )
+                ThumbnailDiskCache.enforceLimit()
             }
             await ShelfStore.shared.setThumb(image, for: id)
         }
