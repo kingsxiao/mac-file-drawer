@@ -111,6 +111,9 @@ final class ShelfStore: ObservableObject {
     /// 最近一次移除 / 清空的快照；非空时界面显示「还原」toast。
     /// 新的移除会替换旧快照（旧的撤销窗口关闭）。不持久化。
     @Published private(set) var undoSnapshot: RemovalSnapshot?
+    /// 轻提示（重复跳过 / 拷贝反馈等非撤销场景）；几秒后自动消失
+    @Published private(set) var notice: String?
+    private var noticeTask: Task<Void, Never>?
     /// 测试注入：收件箱清扫目录（默认真实 Inbox；测试指向临时目录，避免动到真实数据）
     var inboxDirectoryOverride: URL?
 
@@ -162,7 +165,19 @@ final class ShelfStore: ObservableObject {
         refreshMissingStatus()
     }
 
-    func add(urls: [URL]) {
+    /// 发一条轻提示；自动覆盖上一条，2.2 秒后自动消失
+    func postNotice(_ text: String) {
+        notice = text
+        noticeTask?.cancel()
+        noticeTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 2_200_000_000)
+            guard !Task.isCancelled else { return }
+            self?.notice = nil
+        }
+    }
+
+    @discardableResult
+    func add(urls: [URL]) -> (added: Int, skippedDuplicates: Int) {
         var known = Set(items.map(\.path))
         var newItems: [ShelfItem] = []
         newItems.reserveCapacity(urls.count)
@@ -173,10 +188,12 @@ final class ShelfStore: ObservableObject {
             known.insert(path)
             newItems.append(ShelfItem(url: url))
         }
-        guard !newItems.isEmpty else { return }
+        let skipped = urls.count - newItems.count
+        guard !newItems.isEmpty else { return (0, skipped) }
         // 一次性追加：一次 didSet = 一次全量编码落盘（逐条 append 是 O(n²) 次写盘）
         items.append(contentsOf: newItems)
         enforceCapacityLimit()
+        return (newItems.count, skipped)
     }
 
     func remove(_ item: ShelfItem) {

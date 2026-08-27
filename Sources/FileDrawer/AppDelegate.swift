@@ -55,6 +55,9 @@ final class KeyboardRouter {
             let targets = model.selectedItems(in: displayed)
             guard !targets.isEmpty else { return event }
             ClipboardSupport.copyFiles(targets)
+            if targets.count > 1 {
+                store.postNotice("已拷贝 \(targets.count) 个文件")
+            }
             return nil
         }
         // Cmd+V 把剪贴板里的文件 / 文本 / 链接放入抽屉
@@ -117,6 +120,13 @@ final class KeyboardRouter {
             model.moveSelection(by: step, within: displayed)
             return nil
 
+        case 123, 124: // Left / Right：预览打开时同样切换条目（与 ↑↓ 等效）
+            if model.isPreviewVisible {
+                let step = event.keyCode == 124 ? 1 : -1
+                model.moveSelection(by: step, within: displayed)
+                return nil
+            }
+
         case 116: // PageUp：上翻一页
             model.moveSelection(by: -Self.pageStep, within: displayed)
             return nil
@@ -169,7 +179,10 @@ final class KeyboardRouter {
             return
         }
         withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) {
-            store.add(urls: urls)
+            let result = store.add(urls: urls)
+            if result.skippedDuplicates > 0 {
+                store.postNotice("已跳过 \(result.skippedDuplicates) 个重复条目")
+            }
         }
     }
 }
@@ -500,7 +513,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         dlg.message = "选择要放进抽屉的文件或文件夹"
         if dlg.runModal() == .OK {
             withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) {
-                ShelfStore.shared.add(urls: Array(dlg.urls))
+                let result = ShelfStore.shared.add(urls: Array(dlg.urls))
+                if result.skippedDuplicates > 0 {
+                    ShelfStore.shared.postNotice("已跳过 \(result.skippedDuplicates) 个重复条目")
+                }
             }
         }
     }

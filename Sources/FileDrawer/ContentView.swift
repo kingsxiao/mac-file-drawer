@@ -156,8 +156,17 @@ struct ContentView: View {
                 .transition(.move(edge: .bottom).combined(with: .opacity))
                 .zIndex(20)
             }
+            if let notice = store.notice {
+                NoticeToastView(text: notice)
+                    .id(notice)
+                    .padding(.bottom, 14)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .zIndex(21)
+                    .offset(y: store.undoSnapshot == nil ? 0 : 44) // 与撤销 toast 错开
+            }
         }
         .animation(.spring(response: 0.35, dampingFraction: 0.85), value: store.undoSnapshot)
+        .animation(.spring(response: 0.35, dampingFraction: 0.85), value: store.notice)
         .onAppear { beginEntranceWindow() }
     }
 
@@ -367,7 +376,10 @@ private struct DrawerDropDelegate: DropDelegate {
         DropFileLoader.loadAll(from: providers) { urls in
             guard !urls.isEmpty else { return }
             withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) {
-                store.add(urls: urls)
+                let result = store.add(urls: urls)
+                if result.skippedDuplicates > 0 {
+                    store.postNotice("已跳过 \(result.skippedDuplicates) 个重复条目")
+                }
             }
         }
         return true
@@ -663,6 +675,10 @@ private struct ItemRow: View {
         .offset(x: entered ? 0 : (settings.edge == .right ? 18 : -18))
         .animation(.easeOut(duration: 0.3), value: isMissing)
         .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(accessibilityDescription)
+        .accessibilityHint(settings.openOnSingleClick ? "双击打开文件" : "单击选中，双击打开文件")
+        .accessibilityAddTraits(.isButton)
         .onHover { hovering in
             withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                 hovered = hovering
@@ -753,6 +769,15 @@ private struct ItemRow: View {
     private var displayMeta: String {
         if !isMissing { return metaLine }
         return metaLine.isEmpty ? "文件已不存在" : "文件已不存在 · \(metaLine)"
+    }
+
+    /// 无障碍描述：名称 + （置顶 / 失效）+ 元信息
+    private var accessibilityDescription: String {
+        var parts = [item.name]
+        if item.pinned { parts.append("已置顶") }
+        if isMissing { parts.append("文件已不存在") }
+        if !displayMeta.isEmpty { parts.append(displayMeta) }
+        return parts.joined(separator: "，")
     }
 
     /// 名称行：搜索命中高亮 + 失效警示角标
@@ -1273,6 +1298,34 @@ private struct UndoToastView: View {
             }
         }
         .onDisappear { autoDismissTask?.cancel() }
+    }
+}
+
+// MARK: - 轻提示 toast（重复跳过 / 拷贝反馈等），自动消失
+
+private struct NoticeToastView: View {
+    let text: String
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "info.circle")
+                .font(.system(size: 10.5, weight: .medium))
+                .foregroundStyle(DrawerTheme.accent)
+            Text(text)
+                .font(.system(size: 11.5, weight: .medium))
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 11)
+        .padding(.vertical, 7)
+        .background(
+            Capsule(style: .continuous)
+                .fill(.regularMaterial)
+                .overlay(
+                    Capsule(style: .continuous)
+                        .strokeBorder(Color.primary.opacity(0.14), lineWidth: 0.8)
+                )
+        )
+        .shadow(color: .black.opacity(0.18), radius: 12, y: 4)
     }
 }
 

@@ -31,11 +31,25 @@ enum ClipboardSupport {
         return urls ?? []
     }
 
-    /// 剪贴板里的纯文本（优先富文本转纯文本）
+    /// 剪贴板里的纯文本：优先标准 string 类型；富文本（RTF/RTFD）转纯文本
     static func text(from pasteboard: NSPasteboard) -> String? {
         guard let types = pasteboard.types else { return nil }
-        guard types.contains(.string) else { return nil }
-        guard let raw = pasteboard.string(forType: .string) else { return nil }
+        if types.contains(.string), let raw = pasteboard.string(forType: .string) {
+            return nonEmptyTrimmed(raw)
+        }
+        // 从 Word / 浏览器等拷贝的富文本：没有 string 表示时，从 RTF 数据提取纯文本
+        let richType = types.first { $0 == .rtf || $0 == .rtfd }
+        guard let richType, let data = pasteboard.data(forType: richType) else { return nil }
+        let documentType: NSAttributedString.DocumentType = richType == .rtfd ? .rtfd : .rtf
+        guard let attributed = try? NSAttributedString(
+            data: data,
+            options: [.documentType: documentType],
+            documentAttributes: nil
+        ) else { return nil }
+        return nonEmptyTrimmed(attributed.string)
+    }
+
+    private static func nonEmptyTrimmed(_ raw: String) -> String? {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
     }
