@@ -289,6 +289,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         _ = NSApplication.shared.windows // 触发初始化
+        DiagnosticsLog.shared.log("app", "launch done collapsed=\(startCollapsed)")
     }
 
     // MARK: - 展开 / 收起 / 隐藏
@@ -461,6 +462,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
+        menu.addItem(withTitle: L10n.t("导出诊断信息…"), action: #selector(exportDiagnosticsAction), keyEquivalent: "")
         menu.addItem(.separator())
         menu.addItem(withTitle: L10n.t("设置…"), action: #selector(settingsAction), keyEquivalent: ",")
         menu.addItem(.separator())
@@ -510,6 +512,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func handleToggleDrawer() {
         toggleDrawer()
+    }
+
+    /// 导出诊断信息（环境摘要 + 最近日志条目）到文本文件
+    @objc private func exportDiagnosticsAction() {
+        let dlg = NSSavePanel()
+        dlg.canCreateDirectories = true
+        dlg.nameFieldStringValue = "FileDrawer-诊断.txt"
+        dlg.prompt = L10n.t("导出")
+        guard dlg.runModal() == .OK, let url = dlg.url else { return }
+        do {
+            try DiagnosticsLog.shared.currentReport().write(to: url, atomically: true, encoding: .utf8)
+            DiagnosticsLog.shared.log("app", "diagnostics exported")
+        } catch {
+            NSAlert(error: error).runModal()
+        }
     }
 
     @objc private func settingsAction() {
@@ -637,6 +654,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// URL Scheme 动作统一走 DrawerCommands（与快捷指令 / App Intents 同一条路径）
     private func perform(_ action: URLRouter.Action) {
+        DiagnosticsLog.shared.log("url", String(describing: action))  // 动作名与参数枚举（不含文件路径）
         switch action {
         case .add(let paths, let group):
             expandDrawer()

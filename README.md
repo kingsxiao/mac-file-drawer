@@ -196,6 +196,13 @@ Siri 短语示例：「放入 FileDrawer 抽屉」「读取 FileDrawer 抽屉条
 英文翻译集中在 `Sources/FileDrawer/Resources/en.lproj/Localizable.strings`，
 未进表的字符串自动回退中文——永远不会因缺翻译出现 key 乱码，新文案可逐步补表。
 
+## 诊断
+
+菜单栏 →「导出诊断信息…」：把版本 / 系统 / 条目与分组计数 + 最近 200 条操作日志
+（内存环形缓冲，默认不落盘；不含文件路径等敏感内容）写成文本文件，便于排障。
+关键路径（启动、展开收起、全部自动化动作、旧数据迁移、重命名失败）均埋点，
+同时在系统「控制台」按 subsystem `com.wangxiao.filedrawer` 过滤可见。
+
 ## 性能
 
 `swift test` 内置度量基线（`PerformanceBaselineTests`，XCTest measure），覆盖热路径：

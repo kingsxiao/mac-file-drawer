@@ -200,8 +200,13 @@ final class ShelfStore: ObservableObject {
             }
             // 旧版本条目没有 drawerID：归入第一个分组（通常是迁移出的「默认」）
             let fallbackDrawer = drawers[0].id
+            var migratedCount = 0
             for index in restored.indices where restored[index].drawerID == nil {
                 restored[index].drawerID = fallbackDrawer
+                migratedCount += 1
+            }
+            if migratedCount > 0 {
+                DiagnosticsLog.shared.log("store", "legacy items migrated count=\(migratedCount)")
             }
             items = restored
         }

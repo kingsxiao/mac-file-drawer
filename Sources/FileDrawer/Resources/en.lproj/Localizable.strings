@@ -280,3 +280,6 @@
 /* 批次38：对比度预览 */
 "瓷片对比度（WCAG）" = "Tile Contrast (WCAG)";
 "全部类型色在明暗两模式下的符号色实测对比度；不足 3:1 时自动调整（左：浅色，右：深色）。" = "Measured symbol contrast for every type color in both modes; values below 3:1 are auto-adjusted (left: light, right: dark).";
+
+/* 批次39：诊断 */
+"导出诊断信息…" = "Export Diagnostics…";

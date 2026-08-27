@@ -32,11 +32,13 @@ enum DrawerCommands {
         if skipped > 0 { notes.append(L10n.tf("已跳过 %d 个重复条目", skipped)) }
         if invalid > 0 { notes.append(L10n.tf("%d 个路径不存在", invalid)) }
         if !notes.isEmpty { store.postNotice(notes.joined(separator: "，")) }
+        DiagnosticsLog.shared.log("auto", "add added=\(added) skipped=\(skipped) invalid=\(invalid)")
         return (added, skipped, invalid)
     }
 
     /// 在访达中定位文件
     static func reveal(path: String) {
+        DiagnosticsLog.shared.log("auto", "reveal")
         ShelfStore.shared.refreshMissingStatus()
         NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
     }
@@ -81,6 +83,7 @@ enum DrawerCommands {
         withAnimation(.spring(response: 0.32, dampingFraction: 0.8)) {
             store.remove(targets)
         }
+        DiagnosticsLog.shared.log("auto", "remove group=\(group ?? "-") limit=\(limit) count=\(targets.count)")
         return targets.count
     }
 
@@ -94,6 +97,7 @@ enum DrawerCommands {
         }
         let before = store.currentItems.count
         store.clear()
+        DiagnosticsLog.shared.log("auto", "clear group=\(group ?? "-") count=\(before)")
         return before
     }
 
@@ -106,6 +110,7 @@ enum DrawerCommands {
         let targets = limit > 0 ? Array(candidates.prefix(limit)) : Array(candidates)
         guard !targets.isEmpty else { return 0 }
         store.setPinned(pinned, for: Set(targets.map(\.id)))
+        DiagnosticsLog.shared.log("auto", "pin=\(pinned) group=\(group ?? "-") limit=\(limit) count=\(targets.count)")
         return targets.count
     }
 
@@ -120,6 +125,7 @@ enum DrawerCommands {
         guard !targets.isEmpty else { return 0 }
         InteractionModel.shared.setSortMode(.manual, for: drawerID)
         store.send(ids: targets.map(\.id), toFront: true)
+        DiagnosticsLog.shared.log("auto", "send-to-front group=\(group ?? "-") limit=\(limit) count=\(targets.count)")
         return targets.count
     }
 
@@ -146,6 +152,7 @@ enum DrawerCommands {
         let targets = limit > 0 ? Array(candidates.prefix(limit)) : Array(candidates)
         guard !targets.isEmpty else { return 0 }
         store.moveItems(ids: targets.map(\.id), to: targetID)
+        DiagnosticsLog.shared.log("auto", "move group=\(group ?? "-") count=\(targets.count)")
         return targets.count
     }
 
@@ -154,8 +161,13 @@ enum DrawerCommands {
     static func renameItem(path: String, to newName: String) -> Bool {
         let store = ShelfStore.shared
         let standardized = (path as NSString).standardizingPath
-        guard let item = store.items.first(where: { $0.path == standardized }) else { return false }
-        return store.rename(id: item.id, to: newName)
+        guard let item = store.items.first(where: { $0.path == standardized }) else {
+            DiagnosticsLog.shared.log("auto", "rename miss")
+            return false
+        }
+        let ok = store.rename(id: item.id, to: newName)
+        DiagnosticsLog.shared.log("auto", "rename ok=\(ok)")
+        return ok
     }
 
     /// 展开 / 收起 / 切换
