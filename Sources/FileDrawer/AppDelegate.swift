@@ -22,6 +22,8 @@ final class KeyboardRouter {
     private weak var panel: DrawerPanel?
     /// PageUp / PageDown 一次跳过的行数（抽屉同屏量级的经验值）
     static let pageStep = 8
+    /// ⌘1…⌘9 对应的数字键虚拟键码（注意 ANSI 布局 5/6 顺序颠倒）
+    static let digitKeyCodes: [Int] = [18, 19, 20, 21, 23, 22, 26, 28, 25]
 
     func start(panel: DrawerPanel) {
         self.panel = panel
@@ -69,6 +71,13 @@ final class KeyboardRouter {
         // Cmd+A 全选当前展示的条目
         if flags == .command, event.keyCode == 0 { // A
             model.selectAll(in: displayed)
+            return nil
+        }
+        // Cmd+1…⌘9：切换到第 N 个分组（超出分组数放行给系统）
+        if flags == .command, let index = Self.digitKeyCodes.firstIndex(of: Int(event.keyCode)) {
+            let drawers = store.drawers
+            guard index < drawers.count else { return event }
+            withAnimation(DrawerMotion.smooth) { store.switchDrawer(to: drawers[index].id) }
             return nil
         }
 

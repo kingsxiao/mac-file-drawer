@@ -301,7 +301,7 @@ private struct ShortcutSettingsTab: View {
                 }
             }
             Section {
-                Text("热键在任意应用前台时都能展开 / 收起抽屉。组合必须包含 ⌘、⌥ 或 ⌃ 修饰键，点击右侧按键框后按下新组合即可录制。")
+                Text("热键在任意应用前台时都能展开 / 收起抽屉。组合必须包含 ⌘、⌥ 或 ⌃ 修饰键，点击右侧按键框后按下新组合即可录制。抽屉内另有 ⌘F 搜索、⌘A 全选、⌘1–⌘9 切换分组、⌘↑⌘↓ 调整顺序等快捷键。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
