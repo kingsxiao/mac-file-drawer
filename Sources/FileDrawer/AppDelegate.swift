@@ -20,6 +20,8 @@ final class DrawerPanel: NSPanel {
 final class KeyboardRouter {
     private var monitor: Any?
     private weak var panel: DrawerPanel?
+    /// PageUp / PageDown 一次跳过的行数（抽屉同屏量级的经验值）
+    static let pageStep = 8
 
     func start(panel: DrawerPanel) {
         self.panel = panel
@@ -48,6 +50,17 @@ final class KeyboardRouter {
             model.requestSearchFocus()
             return nil
         }
+        // Cmd+C 拷贝选中条目的文件（与访达拷贝同构）
+        if flags == .command, event.keyCode == 8 { // C
+            guard let item = model.selectedItem(in: displayed) else { return event }
+            ClipboardSupport.copyFile(item)
+            return nil
+        }
+        // Cmd+V 把剪贴板里的文件 / 文本 / 链接放入抽屉
+        if flags == .command, event.keyCode == 9 { // V
+            pasteFromClipboard(store: store)
+            return nil
+        }
 
         switch Int(event.keyCode) {
         case 49: // Space：开/关预览
@@ -70,9 +83,14 @@ final class KeyboardRouter {
                 withAnimation(.easeOut(duration: 0.15)) { model.selectedID = nil }
                 return nil
             }
-            if model.isSearchVisible, model.searchText.isEmpty {
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
-                    model.clearSearchAndHideIfNeeded()
+            if model.isSearchVisible {
+                // 有文本先清空，再按一次才收起搜索框（与常见搜索交互一致）
+                if !model.searchText.isEmpty {
+                    withAnimation(.easeOut(duration: 0.15)) { model.searchText = "" }
+                } else {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                        model.clearSearchAndHideIfNeeded()
+                    }
                 }
                 return nil
             }
@@ -80,6 +98,26 @@ final class KeyboardRouter {
         case 125, 126: // Down / Up
             let step = event.keyCode == 125 ? 1 : -1
             model.moveSelection(by: step, within: displayed)
+            return nil
+
+        case 116: // PageUp：上翻一页
+            model.moveSelection(by: -Self.pageStep, within: displayed)
+            return nil
+
+        case 121: // PageDown：下翻一页
+            model.moveSelection(by: Self.pageStep, within: displayed)
+            return nil
+
+        case 115: // Home：选中第一条
+            if let first = displayed.first {
+                withAnimation(DrawerMotion.smooth) { model.select(first) }
+            }
+            return nil
+
+        case 119: // End：选中最后一条
+            if let last = displayed.last {
+                withAnimation(DrawerMotion.smooth) { model.select(last) }
+            }
             return nil
 
         case 36, 76: // Return / Enter：打开选中文件
@@ -101,12 +139,23 @@ final class KeyboardRouter {
         }
         return event
     }
+
+    /// ⌘V：剪贴板里的文件原样入列；文本 / 链接物化成收件箱条目
+    private func pasteFromClipboard(store: ShelfStore) {
+        let urls = ClipboardSupport.pasteableURLs()
+        guard !urls.isEmpty else {
+            NSSound.beep()
+            return
+        }
+        withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) {
+            store.add(urls: urls)
+        }
+    }
 }
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var panel: DrawerPanel!
-    private var contentLayoutGuide = NSLayoutConstraint()
     private var statusItem: NSStatusItem!
     private var isOpen = false
     private let keyboardRouter = KeyboardRouter()
@@ -253,11 +302,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - 设置生效
 
-    /// 把当前设置应用到窗口（外观 / 层级 / 热键 / 贴边几何）
+    /// 把当前设置应用到窗口（外观 / 层级 / 热键 / 贴边几何 / Dock 图标）
     private func applySettings() {
         guard panel != nil else { return }
         panel.appearance = settings.appearance.nsAppearance
         panel.level = settings.panelLevel.nsLevel
+        // 只有真的变化才切激活策略：反复 set 同值会闪 Dock 图标
+        let policy: NSApplication.ActivationPolicy = settings.showDockIcon ? .regular : .accessory
+        if NSApp.activationPolicy() != policy {
+            NSApp.setActivationPolicy(policy)
+        }
         HotKeyCenter.shared.update(settings.hotKeyEnabled ? settings.hotKeyBinding : nil) { [weak self] in
             self?.toggleCollapseOrExpand()
         }
@@ -306,6 +360,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(.separator())
         menu.addItem(withTitle: "设置…", action: #selector(settingsAction), keyEquivalent: ",")
         menu.addItem(.separator())
+        menu.addItem(withTitle: "关于文件抽屉", action: #selector(aboutAction), keyEquivalent: "")
         menu.addItem(withTitle: "退出文件抽屉", action: #selector(quitAction), keyEquivalent: "q")
         statusItem.menu = menu
     }
@@ -316,6 +371,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let appMenuItem = NSMenuItem(title: "文件抽屉", action: nil, keyEquivalent: "")
         let appMenu = NSMenu()
+        appMenu.addItem(withTitle: "关于文件抽屉", action: #selector(aboutAction), keyEquivalent: "")
+        appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "设置…", action: #selector(settingsAction), keyEquivalent: ",")
         appMenu.addItem(.separator())
         // 头部空间有限，导入 / 清空收进菜单（拖拽仍是放入文件的主方式）
@@ -336,10 +393,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let editMenuItem = NSMenuItem(title: "编辑", action: nil, keyEquivalent: "")
         let editMenu = NSMenu(title: "编辑")
-        editMenu.addItem(withTitle: "剪切", action: Selector(("cut:")), keyEquivalent: "x")
-        editMenu.addItem(withTitle: "拷贝", action: Selector(("copy:")), keyEquivalent: "c")
-        editMenu.addItem(withTitle: "粘贴", action: Selector(("paste:")), keyEquivalent: "v")
-        editMenu.addItem(withTitle: "全选", action: Selector(("selectAll:")), keyEquivalent: "a")
+        editMenu.addItem(withTitle: "剪切", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        editMenu.addItem(withTitle: "拷贝", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        editMenu.addItem(withTitle: "粘贴", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        editMenu.addItem(withTitle: "全选", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
         editMenuItem.submenu = editMenu
         mainMenu.addItem(editMenuItem)
 
@@ -354,6 +411,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func settingsAction() {
         SettingsWindowManager.shared.show()
+    }
+
+    /// 关于窗口：版本号优先取应用包，开发裸跑时回退到硬编码基线
+    @objc private func aboutAction() {
+        NSApp.activate(ignoringOtherApps: true)
+        let bundle = Bundle.main
+        let version = bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0.0"
+        let build = bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "dev"
+        NSApp.orderFrontStandardAboutPanel(options: [
+            .applicationVersion: "版本 \(version)（\(build)）",
+            .version: "",
+            .credits: "Swift + AppKit + SwiftUI · 无第三方依赖",
+        ])
     }
 
     @objc private func appDidResignActive() {
@@ -399,7 +469,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        ShelfStore.shared.persist()
+        ShelfStore.shared.prepareForTermination()
     }
 }
 

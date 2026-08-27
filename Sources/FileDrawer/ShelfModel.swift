@@ -11,11 +11,13 @@ struct ShelfItem: Identifiable, Codable, Equatable {
     let id: UUID
     var path: String
     var addedAt: Date
+    /// 类型识别（含一次磁盘 stat）在构造时算好存起来；
+    /// 渲染路径每次 body 都会读它，现场重算会让悬停/滚动每帧都打 I/O。
+    /// 文件被原地替换成别的类型属罕见场景，不值得为此每帧重识别。
+    var kind: FileKind
 
     init(url: URL) {
-        self.id = UUID()
-        self.path = url.standardizedFileURL.path
-        self.addedAt = Date()
+        self.init(url: url, addedAt: Date())
     }
 
     /// 测试与工具场景：可注入确定的时间
@@ -23,12 +25,48 @@ struct ShelfItem: Identifiable, Codable, Equatable {
         self.id = UUID()
         self.path = url.standardizedFileURL.path
         self.addedAt = addedAt
+        self.kind = FileKind(url: url)
     }
 
     var url: URL { URL(fileURLWithPath: path) }
     var name: String { url.lastPathComponent }
 
-    var kind: FileKind { FileKind(url: url) }
+    // 持久化格式只含 id/path/addedAt；kind 由 path 反推，避免冗余与失同步
+    private enum CodingKeys: String, CodingKey { case id, path, addedAt }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try container.decode(UUID.self, forKey: .id)
+        self.path = try container.decode(String.self, forKey: .path)
+        self.addedAt = try container.decode(Date.self, forKey: .addedAt)
+        self.kind = FileKind(url: URL(fileURLWithPath: path))
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(path, forKey: .path)
+        try container.encode(addedAt, forKey: .addedAt)
+    }
+}
+
+// MARK: - 撤销快照：移除 / 清空后保留一段时间，供「还原」取回
+
+struct RemovalSnapshot: Equatable {
+    struct Entry: Equatable {
+        let item: ShelfItem
+        /// 被移除时在列表中的位置，还原时按原位插回
+        let index: Int
+    }
+    let entries: [Entry]
+    /// toast 文案（如 已移除「xx.txt」 / 已清空抽屉（3 个条目））
+    let summary: String
+
+    static func == (lhs: RemovalSnapshot, rhs: RemovalSnapshot) -> Bool {
+        lhs.entries.map(\.item.id) == rhs.entries.map(\.item.id)
+            && lhs.entries.map(\.index) == rhs.entries.map(\.index)
+            && lhs.summary == rhs.summary
+    }
 }
 
 // MARK: - Store
@@ -45,8 +83,24 @@ final class ShelfStore: ObservableObject {
     /// 缩略图缓存（图片/视频真实预览）
     @Published var thumbs: [UUID: NSImage] = [:]
     private var thumbFailed = Set<UUID>()
+    /// 正在后台解码的条目：行反复 onAppear（滚动/搜索过滤）时
+    /// 避免对同一个大文件并发排多个解码任务
+    private var thumbInFlight = Set<UUID>()
+    /// 大小文本缓存（按路径）：文件夹的大小要列目录，不能每次渲染都算
+    private var sizeTextCache: [String: String] = [:]
     /// 设置里重新打开缩略图时，为已经显示过（错过 onAppear）的行补齐
     private var thumbnailSettingCancellable: AnyCancellable?
+    /// 设置面板调整清理策略时立即生效（设置承诺「即时生效」）
+    private var maintenanceCancellable: AnyCancellable?
+    /// 最近一次移除 / 清空的快照；非空时界面显示「还原」toast。
+    /// 新的移除会替换旧快照（旧的撤销窗口关闭）。不持久化。
+    @Published private(set) var undoSnapshot: RemovalSnapshot?
+    /// 测试注入：收件箱清扫目录（默认真实 Inbox；测试指向临时目录，避免动到真实数据）
+    var inboxDirectoryOverride: URL?
+
+    private var effectiveInboxDirectory: URL {
+        inboxDirectoryOverride ?? InboxStore.directory
+    }
 
     private init() {
         if let data = UserDefaults.standard.data(forKey: Self.defaultsKey),
@@ -72,42 +126,69 @@ final class ShelfStore: ObservableObject {
                     ShelfStore.shared.ensureThumbsForAll()
                 }
             }
+        // 容量上限 / 过期清理策略变化 → 立即按新策略收敛现有条目
+        maintenanceCancellable = Publishers.Merge(
+            AppSettings.shared.$autoClean.dropFirst().map { _ in () },
+            AppSettings.shared.$maxItems.dropFirst().map { _ in () }
+        )
+        .receive(on: DispatchQueue.main)
+        .sink { _ in
+            MainActor.assumeIsolated {
+                ShelfStore.shared.applyMaintenancePolicies()
+            }
+        }
+        // 上次会话若带着未还原的快照退出，这里把失去引用的物化文件清掉
+        // （测试进程注入临时目录前不清扫，避免动到真实收件箱）
+        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil {
+            settleInbox()
+        }
     }
 
     func add(urls: [URL]) {
+        var known = Set(items.map(\.path))
+        var newItems: [ShelfItem] = []
+        newItems.reserveCapacity(urls.count)
         for url in urls {
             let path = url.standardizedFileURL.path
-            guard !items.contains(where: { $0.path == path }) else { continue }
-            items.append(ShelfItem(url: url))
+            // 与已有条目、以及同批次内的重复项一并不重复入列
+            guard !known.contains(path) else { continue }
+            known.insert(path)
+            newItems.append(ShelfItem(url: url))
         }
+        guard !newItems.isEmpty else { return }
+        // 一次性追加：一次 didSet = 一次全量编码落盘（逐条 append 是 O(n²) 次写盘）
+        items.append(contentsOf: newItems)
         enforceCapacityLimit()
     }
 
     func remove(_ item: ShelfItem) {
+        recordRemoval(entries: [initRemovalEntry(item)])
         items.removeAll { $0.id == item.id }
-        thumbs[item.id] = nil
-        thumbFailed.remove(item.id)
+        releaseAuxState(ids: [item.id], paths: [item.path])
     }
 
     /// 手动清理：丢弃硬盘上已不存在的条目（设置面板「立即清理」）
     func removeMissing() {
         let missing = items.filter { !FileManager.default.fileExists(atPath: $0.path) }
         guard !missing.isEmpty else { return }
+        recordRemoval(entries: missing.map(initRemovalEntry), summary: "已清理 \(missing.count) 个失效条目")
         withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
-            for item in missing {
-                thumbs[item.id] = nil
-                thumbFailed.remove(item.id)
-            }
-            items.removeAll { !FileManager.default.fileExists(atPath: $0.path) }
+            releaseAuxState(ids: Set(missing.map(\.id)), paths: Set(missing.map(\.path)))
+            let missingIDs = Set(missing.map(\.id))
+            items.removeAll { missingIDs.contains($0.id) }
         }
     }
 
-    /// 「移动到文件夹」后把条目改写为指向新路径
+    /// 「移动到文件夹」后把条目改写为指向新路径（类型随新路径重新识别）
     func updatePath(id: UUID, to url: URL) {
         guard let index = items.firstIndex(where: { $0.id == id }) else { return }
+        let oldPath = items[index].path
         items[index].path = url.standardizedFileURL.path
+        items[index].kind = FileKind(url: url)
         thumbs[id] = nil
         thumbFailed.remove(id)
+        thumbInFlight.remove(id)
+        sizeTextCache.removeValue(forKey: oldPath)
     }
 
     // MARK: 维护策略（纯函数，可单测）
@@ -131,25 +212,112 @@ final class ShelfStore: ObservableObject {
         return items.filter { keep.contains($0.id) }
     }
 
+    /// 按当前「过期清理 + 容量上限」策略收敛条目（设置调整时即时调用）
+    private func applyMaintenancePolicies() {
+        let settings = AppSettings.shared
+        let next = Self.trimmed(Self.pruned(items, policy: settings.autoClean), limit: settings.maxItems)
+        guard next.count != items.count else { return }
+        let kept = Set(next.map(\.id))
+        let dropped = items.filter { !kept.contains($0.id) }
+        withAnimation(.spring(response: 0.32, dampingFraction: 0.8)) {
+            releaseAuxState(ids: Set(dropped.map(\.id)), paths: Set(dropped.map(\.path)))
+            items = next
+        }
+    }
+
     @MainActor
     private func enforceCapacityLimit() {
         let capped = Self.trimmed(items, limit: AppSettings.shared.maxItems)
         if capped.count != items.count {
-            let removed = Set(items.map(\.id)).subtracting(Set(capped.map(\.id)))
-            for id in removed {
-                thumbs[id] = nil
-                thumbFailed.remove(id)
-            }
+            let kept = Set(capped.map(\.id))
+            let dropped = items.filter { !kept.contains($0.id) }
+            releaseAuxState(ids: Set(dropped.map(\.id)), paths: Set(dropped.map(\.path)))
             items = capped
         }
     }
 
+    /// 条目离开抽屉时回收其附属状态（缩略图 / 解码标记 / 大小缓存）
+    private func releaseAuxState(ids: Set<UUID>, paths: Set<String>) {
+        for id in ids {
+            thumbs[id] = nil
+            thumbFailed.remove(id)
+            thumbInFlight.remove(id)
+        }
+        for path in paths {
+            sizeTextCache.removeValue(forKey: path)
+        }
+    }
+
     func clear() {
+        guard !items.isEmpty else { return }
+        recordRemoval(entries: items.map(initRemovalEntry), summary: "已清空抽屉（\(items.count) 个条目）")
         withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
             items.removeAll()
         }
         thumbs.removeAll()
         thumbFailed.removeAll()
+        thumbInFlight.removeAll()
+        sizeTextCache.removeAll()
+    }
+
+    // MARK: 撤销
+
+    /// 记录移除前快照（覆盖旧快照 = 旧撤销窗口关闭）
+    private func recordRemoval(entries: [RemovalSnapshot.Entry], summary: String? = nil) {
+        guard !entries.isEmpty else { return }
+        let previous = undoSnapshot
+        undoSnapshot = RemovalSnapshot(
+            entries: entries,
+            summary: summary ?? (entries.count == 1
+                ? "已移除「\(entries[0].item.name)」"
+                : "已移除 \(entries.count) 个条目")
+        )
+        // 旧快照被顶掉：其收件箱文件不再受保护
+        if previous != nil { settleInbox() }
+    }
+
+    private func initRemovalEntry(_ item: ShelfItem) -> RemovalSnapshot.Entry {
+        RemovalSnapshot.Entry(item: item, index: items.firstIndex(where: { $0.id == item.id }) ?? items.count)
+    }
+
+    /// 还原最近一次移除：按原位置插回，返回还原条数
+    @discardableResult
+    func undoLastRemoval() -> Int {
+        guard let snapshot = undoSnapshot else { return 0 }
+        undoSnapshot = nil
+        let restored = withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) {
+            var next = items
+            for entry in snapshot.entries.sorted(by: { $0.index < $1.index }) {
+                let position = min(entry.index, next.count)
+                next.insert(entry.item, at: position)
+            }
+            items = next
+            return snapshot.entries.count
+        }
+        settleInbox()
+        return restored
+    }
+
+    /// 放弃还原（toast 超时或用户关闭）
+    func discardUndo() {
+        guard undoSnapshot != nil else { return }
+        undoSnapshot = nil
+        settleInbox()
+    }
+
+    /// 收件箱清扫：删除不再被任何条目引用（也无待还原快照保护）的物化文件
+    private func settleInbox() {
+        var referenced = Set(items.map(\.path))
+        if let snapshot = undoSnapshot {
+            snapshot.entries.forEach { referenced.insert($0.item.path) }
+        }
+        InboxStore.sweep(referenced: referenced, directory: effectiveInboxDirectory)
+    }
+
+    /// 退出前收尾：持久化 + 清扫失去引用的物化文件
+    func prepareForTermination() {
+        persist()
+        settleInbox()
     }
 
     // MARK: 缩略图
@@ -159,7 +327,11 @@ final class ShelfStore: ObservableObject {
     func ensureThumb(for item: ShelfItem) {
         guard AppSettings.shared.showThumbnails else { return }
         guard thumbs[item.id] == nil, thumbFailed.contains(item.id) == false else { return }
-        guard item.kind.producesThumbnail else { return }
+        guard thumbInFlight.insert(item.id).inserted else { return } // 已在解码，勿重复排队
+        guard item.kind.producesThumbnail else {
+            thumbInFlight.remove(item.id)
+            return
+        }
         let variant = item.kind.variant
         let id = item.id
         let url = item.url
@@ -183,12 +355,21 @@ final class ShelfStore: ObservableObject {
 
     @MainActor
     fileprivate func setThumb(_ image: NSImage?, for id: UUID) {
+        thumbInFlight.remove(id) // 成败都先解除占位，允许将来重试
         guard items.contains(where: { $0.id == id }) else { return }
         if let image {
             thumbs[id] = image
         } else {
             thumbFailed.insert(id)
         }
+    }
+
+    /// 渲染路径取大小文本：同一路径只做一次磁盘查询（含列目录），随条目生命周期缓存
+    func cachedSizeText(for path: String) -> String {
+        if let cached = sizeTextCache[path] { return cached }
+        let text = Self.sizeText(for: path)
+        sizeTextCache[path] = text
+        return text
     }
 
     private nonisolated static func downsampledImage(_ url: URL) -> NSImage? {

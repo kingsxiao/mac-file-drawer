@@ -33,6 +33,7 @@ final class AppSettingsTests: XCTestCase {
             XCTAssertFalse(s.hotKeyEnabled)
             XCTAssertEqual(s.hotKeyBinding?.keyCode, 49)
             XCTAssertEqual(s.hotKeyBinding?.modifiers, .option)
+            XCTAssertTrue(s.showDockIcon, "Dock 图标默认开启，保持既有形态")
         }
     }
 
@@ -54,6 +55,7 @@ final class AppSettingsTests: XCTestCase {
             s.expandOnDragHover = false
             s.autoCollapseOnBlur = true
             s.panelLevel = .normal
+            s.showDockIcon = false
             s.hotKeyEnabled = true
             s.hotKeyBinding = HotKeyBinding(keyCode: 1, modifiers: [.command, .shift])
 
@@ -68,6 +70,7 @@ final class AppSettingsTests: XCTestCase {
             XCTAssertFalse(reloaded.expandOnDragHover)
             XCTAssertTrue(reloaded.autoCollapseOnBlur)
             XCTAssertEqual(reloaded.panelLevel, .normal)
+            XCTAssertFalse(reloaded.showDockIcon)
             XCTAssertTrue(reloaded.hotKeyEnabled)
             XCTAssertEqual(reloaded.hotKeyBinding?.keyCode, 1)
             XCTAssertEqual(reloaded.hotKeyBinding?.modifiers, [.command, .shift])
@@ -205,15 +208,33 @@ final class AppSettingsTests: XCTestCase {
         }
     }
 
+    /// 录到无效组合（缺 ⌘/⌥/⌃）时不得落库：否则 get 侧归 nil，
+    /// 应用会把已注册热键注销，而界面还显示着无效组合的假标签
+    func testHotKeyBindingSetterRejectsInvalidCombos() {
+        let (defaults, name) = makeDefaults()
+        defer { defaults.removePersistentDomain(forName: name) }
+
+        MainActor.assumeIsolated {
+            let s = AppSettings(defaults: defaults)
+            s.hotKeyBinding = HotKeyBinding(keyCode: 1, modifiers: [.command])
+            XCTAssertEqual(s.hotKeyLabel, "⌘S")
+
+            s.hotKeyBinding = HotKeyBinding(keyCode: 2, modifiers: [])      // 无修饰键
+            s.hotKeyBinding = HotKeyBinding(keyCode: 2, modifiers: [.shift]) // 仅 ⇧
+            XCTAssertEqual(s.hotKeyCode, 1, "无效组合不应覆盖已录制热键")
+            XCTAssertEqual(s.hotKeyLabel, "⌘S")
+            XCTAssertNotNil(s.hotKeyBinding)
+        }
+    }
+
     func testHotKeyCenterRegisterLifecycle() {
         MainActor.assumeIsolated {
-            var fired = false
-            HotKeyCenter.shared.update(HotKeyBinding(keyCode: 49, modifiers: [.option])) { fired = true }
+            HotKeyCenter.shared.update(HotKeyBinding(keyCode: 49, modifiers: [.option])) {}
             XCTAssertEqual(HotKeyCenter.shared.isRegistered, true)
             HotKeyCenter.shared.unregister()
             XCTAssertFalse(HotKeyCenter.shared.isRegistered)
             // binding 为 nil 时安全无副作用
-            HotKeyCenter.shared.update(nil) { fired = true }
+            HotKeyCenter.shared.update(nil) {}
             XCTAssertFalse(HotKeyCenter.shared.isRegistered)
         }
     }

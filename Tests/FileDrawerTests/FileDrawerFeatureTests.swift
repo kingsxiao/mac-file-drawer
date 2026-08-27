@@ -50,6 +50,43 @@ final class FileDrawerFeatureTests: XCTestCase {
         XCTAssertEqual(Set(loaded.map(\.standardizedFileURL)), expected)
     }
 
+    /// 多文件拖入的最终入列顺序应与拖入时一致（完成回调可能乱序到达）
+    @MainActor
+    func testLoadAllPreservesProviderOrder() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let names = ["样本甲.txt", "样本乙.txt", "样本丙.txt"]
+        let providers = try names.map { name -> NSItemProvider in
+            let url = dir.appendingPathComponent(name)
+            try Data(name.utf8).write(to: url)
+            return ShelfItem(url: url).dragProvider()
+        }
+
+        let loaded = waitForURLs { DropFileLoader.loadAll(from: providers, completion: $0) }
+        XCTAssertEqual(loaded.map(\.lastPathComponent), names)
+    }
+
+    // MARK: - 条目编解码
+
+    /// 持久化格式只含 id/path/addedAt，kind 由 path 反推；往返后类型识别应一致
+    func testShelfItemCodableRoundTripRecomputesKind() throws {
+        let item = ShelfItem(
+            url: URL(fileURLWithPath: "/tmp/a.swift"),
+            addedAt: Date(timeIntervalSince1970: 1000)
+        )
+        XCTAssertEqual(item.kind.variant, .code)
+
+        let data = try JSONEncoder().encode(item)
+        let decoded = try JSONDecoder().decode(ShelfItem.self, from: data)
+        XCTAssertEqual(decoded.id, item.id)
+        XCTAssertEqual(decoded.path, item.path)
+        XCTAssertEqual(decoded.addedAt, item.addedAt)
+        XCTAssertEqual(decoded.kind, item.kind, "kind 应由 path 重新识别且与构造时一致")
+    }
+
     private func waitForURLs(_ run: (@escaping ([URL]) -> Void) -> Void) -> [URL] {
         let expectation = expectation(description: "urls loaded")
         var result = [URL]()

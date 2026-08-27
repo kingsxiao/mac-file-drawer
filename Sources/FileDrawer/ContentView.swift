@@ -13,6 +13,8 @@ struct ContentView: View {
     @State private var handleHovered = false
     /// 抽屉展开后的短时间「入场窗口」：窗口内出现的条目按序错峰滑入
     @State private var entranceWindowActive = false
+    /// 入场窗口的代际：快速收起再展开时，旧定时器无权关闭新一轮入场
+    @State private var entranceGeneration = 0
     @FocusState private var searchFocused: Bool
 
     /// 当前应展示的条目（过滤 + 排序后）
@@ -142,13 +144,30 @@ struct ContentView: View {
                     .zIndex(10)
             }
         }
+        .overlay(alignment: .bottom) {
+            if let snapshot = store.undoSnapshot {
+                UndoToastView(summary: snapshot.summary) {
+                    store.undoLastRemoval()
+                } onDismiss: {
+                    store.discardUndo()
+                }
+                .id(snapshot.summary + String(snapshot.entries.count))
+                .padding(.bottom, 14)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .zIndex(20)
+            }
+        }
+        .animation(.spring(response: 0.35, dampingFraction: 0.85), value: store.undoSnapshot)
         .onAppear { beginEntranceWindow() }
     }
 
     /// 展开（或首次出现）后 0.9 秒内启用条目错峰入场；之后出现的行（如搜索回填）直接就位
     private func beginEntranceWindow() {
         entranceWindowActive = true
+        entranceGeneration += 1
+        let generation = entranceGeneration
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) {
+            guard entranceGeneration == generation else { return }
             entranceWindowActive = false
         }
     }
@@ -305,8 +324,8 @@ struct ContentView: View {
             }
             .scrollBounceBehavior(.basedOnSize)
             // 键盘 ↑↓ 移动选中时，选中行平滑滚入视野
-            .onChange(of: interaction.selectedID) { id in
-                guard let id else { return }
+            .onChange(of: interaction.selectedID) {
+                guard let id = interaction.selectedID else { return }
                 withAnimation(DrawerMotion.smooth) {
                     proxy.scrollTo(id, anchor: .center)
                 }
@@ -366,23 +385,15 @@ private struct HeaderView: View {
         HStack(spacing: 7) {
             Image(systemName: "tray.full")
                 .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(DrawerTheme.accentGradient)
+                .foregroundStyle(.primary)
                 .frame(width: 28, height: 28)
                 .background(
                     RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .fill(
-                            LinearGradient(
-                                stops: [
-                                    .init(color: DrawerTheme.accent.opacity(0.22), location: 0),
-                                    .init(color: DrawerTheme.accentAlt.opacity(0.10), location: 1),
-                                ],
-                                startPoint: .topLeading, endPoint: .bottomTrailing
-                            )
-                        )
+                        .fill(Color.primary.opacity(0.08))
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .strokeBorder(DrawerTheme.accent.opacity(0.28), lineWidth: 0.8)
+                        .strokeBorder(Color.primary.opacity(0.15), lineWidth: 0.8)
                 )
 
             Text("文件抽屉")
@@ -395,10 +406,10 @@ private struct HeaderView: View {
                     .font(.system(size: 10, weight: .semibold, design: .monospaced))
                     .monospacedDigit()
                     .contentTransition(.numericText())
-                    .foregroundStyle(DrawerTheme.accent)
+                    .foregroundStyle(.primary)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
-                    .background(Capsule().fill(DrawerTheme.accent.opacity(0.12)))
+                    .background(Capsule().fill(Color.primary.opacity(0.10)))
                     .transition(.scale(scale: 0.6).combined(with: .opacity))
             }
 
@@ -651,6 +662,7 @@ private struct ItemRow: View {
             Button("快速预览") { interaction.togglePreview(for: item) }
             Button("在访达中显示") { NSWorkspace.shared.activateFileViewerSelecting([item.url]) }
             Divider()
+            Button("拷贝文件") { ClipboardSupport.copyFile(item) }
             Button("拷贝路径") { copyPath() }
             Button("移动到文件夹…") { moveToFolder() }
             Button("另存为…") { exportItem() }
@@ -1017,6 +1029,65 @@ private struct NoResultsView: View {
     }
 }
 
+// MARK: - 撤销 toast：移除 / 清空后短暂出现，可一键还原
+
+private struct UndoToastView: View {
+    let summary: String
+    let onUndo: () -> Void
+    let onDismiss: () -> Void
+    @State private var autoDismissTask: Task<Void, Never>?
+
+    var body: some View {
+        HStack(spacing: 9) {
+            Image(systemName: "trash")
+                .font(.system(size: 10.5, weight: .medium))
+                .foregroundStyle(.secondary)
+
+            Text(summary)
+                .font(.system(size: 11.5, weight: .medium))
+                .lineLimit(1)
+
+            Button(action: onUndo) {
+                Text("还原")
+                    .font(.system(size: 11.5, weight: .semibold))
+                    .foregroundStyle(Color.white)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 2.5)
+                    .background(Capsule().fill(DrawerTheme.accentGradient))
+            }
+            .buttonStyle(PressScaleStyle(scale: 0.92))
+
+            Button(action: onDismiss) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(PressScaleStyle(scale: 0.82))
+            .help("关闭")
+        }
+        .padding(.horizontal, 11)
+        .padding(.vertical, 7)
+        .background(
+            Capsule(style: .continuous)
+                .fill(.regularMaterial)
+                .overlay(
+                    Capsule(style: .continuous)
+                        .strokeBorder(Color.primary.opacity(0.14), lineWidth: 0.8)
+                )
+        )
+        .shadow(color: .black.opacity(0.22), radius: 14, y: 5)
+        .onAppear {
+            autoDismissTask?.cancel()
+            autoDismissTask = Task {
+                try? await Task.sleep(nanoseconds: 4_500_000_000)
+                guard !Task.isCancelled else { return }
+                onDismiss()
+            }
+        }
+        .onDisappear { autoDismissTask?.cancel() }
+    }
+}
+
 // MARK: - QuickLook 预览弹层
 
 private struct PreviewOverlayView: View {
@@ -1290,7 +1361,7 @@ struct EmptyStateView: View {
 
                     Text(isTargeted
                          ? "支持一次拖入多个文件"
-                         : "从访达拖入任何文件或文件夹\n需要时再原样拖出去")
+                         : "从访达拖入文件、文件夹或链接\n也可以直接拖入一段文本 · ⌘V 粘贴")
                         .font(.system(size: 11.5))
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)

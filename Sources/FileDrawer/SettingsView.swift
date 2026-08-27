@@ -1,5 +1,23 @@
 import AppKit
+import ServiceManagement
 import SwiftUI
+
+// MARK: - 登录项（SMAppService，macOS 13+）
+// 真实状态以系统为准（用户可能直接在系统设置里改），界面只做镜像。
+
+enum LoginItemController {
+    static var isEnabled: Bool {
+        SMAppService.mainApp.status == .enabled
+    }
+
+    static func setEnabled(_ on: Bool) throws {
+        if on {
+            try SMAppService.mainApp.register()
+        } else {
+            try SMAppService.mainApp.unregister()
+        }
+    }
+}
 
 // MARK: - 设置窗口管理
 
@@ -13,8 +31,9 @@ final class SettingsWindowManager {
 
     func show() {
         if window == nil {
+            // contentRect 与 SettingsView 的固定 frame 对齐，避免HostingView 留死边
             let w = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 500, height: 460),
+                contentRect: NSRect(x: 0, y: 0, width: 480, height: 440),
                 styleMask: [.titled, .closable],
                 backing: .buffered,
                 defer: false
@@ -54,6 +73,9 @@ private struct GeneralSettingsTab: View {
     @ObservedObject private var settings = AppSettings.shared
     @ObservedObject private var interaction = InteractionModel.shared
     @ObservedObject private var store = ShelfStore.shared
+    /// 登录项状态镜像：系统设置里也可能被用户直接改动，每次出现时重新读取
+    @State private var launchAtLogin = false
+    @State private var loginItemError: String?
 
     var body: some View {
         Form {
@@ -61,6 +83,15 @@ private struct GeneralSettingsTab: View {
                 Picker("启动时", selection: $settings.launchCollapsed) {
                     Text("展开抽屉").tag(false)
                     Text("收起为边条").tag(true)
+                }
+                Toggle("登录 macOS 后自动启动", isOn: Binding(
+                    get: { launchAtLogin },
+                    set: { setLaunchAtLogin($0) }
+                ))
+                if let loginItemError {
+                    Text(loginItemError)
+                        .font(.caption)
+                        .foregroundStyle(.red)
                 }
                 Toggle("丢弃已不存在的文件", isOn: $settings.removeMissingOnLaunch)
                 Text("关闭后，指向已删除文件的条目会保留在抽屉里，直到手动移除。")
@@ -89,7 +120,7 @@ private struct GeneralSettingsTab: View {
                         Text(limit.label).tag(limit)
                     }
                 }
-                Text("超出上限时淘汰最早加入的条目。")
+                Text("超出上限时淘汰最早加入的条目。移除 / 清空的条目可通过提示条「还原」。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 LabeledContent("当前条目") {
@@ -103,6 +134,21 @@ private struct GeneralSettingsTab: View {
         }
         .formStyle(.grouped)
         .frame(maxHeight: .infinity, alignment: .top)
+        .onAppear {
+            launchAtLogin = LoginItemController.isEnabled
+            loginItemError = nil
+        }
+    }
+
+    private func setLaunchAtLogin(_ on: Bool) {
+        do {
+            try LoginItemController.setEnabled(on)
+            loginItemError = nil
+        } catch {
+            loginItemError = "未能\(on ? "开启" : "关闭")登录启动：\(error.localizedDescription)"
+        }
+        // 无论成败都以系统当前状态为准
+        launchAtLogin = LoginItemController.isEnabled
     }
 }
 
@@ -195,6 +241,10 @@ private struct BehaviorSettingsTab: View {
                         Text(level.label).tag(level)
                     }
                 }
+                Toggle("在 Dock 中显示图标", isOn: $settings.showDockIcon)
+                Text("关闭后仅保留菜单栏图标（菜单栏 → 设置… 可随时恢复）。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
@@ -217,7 +267,10 @@ private struct ShortcutSettingsTab: View {
                         HotKeyRecorderControl(label: settings.hotKeyLabel, recording: $recording) { event in
                             guard event.keyCode != 53 else { return } // Esc = 取消录制
                             let flags = event.modifierFlags.intersection([.command, .option, .control, .shift])
-                            settings.hotKeyBinding = HotKeyBinding(keyCode: Int(event.keyCode), modifiers: flags)
+                            let binding = HotKeyBinding(keyCode: Int(event.keyCode), modifiers: flags)
+                            // 缺 ⌘/⌥/⌃ 的组合不收录，原热键保持不变
+                            guard binding.isValid else { return }
+                            settings.hotKeyBinding = binding
                         }
                     }
                     Button("恢复默认（⌥ Space）") {

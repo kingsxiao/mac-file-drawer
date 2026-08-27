@@ -20,7 +20,7 @@ struct FileIconStyle: Equatable {
 
 // MARK: - FileKind：URL →（粗分类 Variant + 精细样式 style）
 
-struct FileKind {
+struct FileKind: Equatable {
     /// 粗分类：排序分组与缩略图策略使用
     enum Variant: Equatable {
         case folder, pdf, document, spreadsheet, presentation, image, video, audio, archive, code, design, font, other
@@ -233,6 +233,8 @@ enum FileTypeCatalog {
         family(["torrent"], entry(.other, "arrow.down.circle", 0x7A8794)),
         family(["exe", "msi"], entry(.other, "pc", 0x6E7680)),
         family(["apk", "aab"], entry(.other, "app.fill", 0x4E9A51)),
+        // 拖入链接物化成的网页快捷方式
+        family(["webloc", "url"], entry(.other, "link", 0x2E86D6, badge: "URL")),
     ].flatMap { $0 })
 
     // MARK: 特殊文件名（无扩展名或需优先于扩展名识别）

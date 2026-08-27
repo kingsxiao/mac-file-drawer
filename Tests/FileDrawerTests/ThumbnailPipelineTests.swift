@@ -1,8 +1,14 @@
 import XCTest
 import AppKit
-import AVFoundation
+@preconcurrency import AVFoundation
 import PDFKit
 @testable import FileDrawer
+
+/// AVFoundation 的写入器族未标 Sendable；测试闭包只在单一串行队列里使用，装盒消除告警
+private struct UnsafeSendable<T>: @unchecked Sendable {
+    let value: T
+    init(_ value: T) { self.value = value }
+}
 
 /// 图片 / 视频 / PDF 缩略图端到端契约：
 /// 真实文件 → ensureThumb（后台解码）→ thumbs 缓存出现可显示的位图。
@@ -82,7 +88,13 @@ final class ThumbnailPipelineTests: XCTestCase {
         let queue = DispatchQueue(label: "thumb-test.video")
         var nextFrame = 0
         var ended = false
+        let inputBox = UnsafeSendable(input)
+        let writerBox = UnsafeSendable(writer)
+        let adaptorBox = UnsafeSendable(adaptor)
         input.requestMediaDataWhenReady(on: queue) {
+            let input = inputBox.value
+            let writer = writerBox.value
+            let adaptor = adaptorBox.value
             // 编码器未就绪时硬塞会抛 NSInternalInconsistencyException，必须按就绪节奏喂帧
             while input.isReadyForMoreMediaData {
                 guard nextFrame < 12 else {

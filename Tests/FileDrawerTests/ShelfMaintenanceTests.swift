@@ -158,4 +158,95 @@ final class ShelfMaintenanceTests: XCTestCase {
         XCTAssertEqual(DrawerMaterial.allCases.count, 4)
         XCTAssertEqual(DrawerEdge.allCases.count, 2)
     }
+
+    // MARK: - 入列去重
+
+    @MainActor
+    func testAddDeduplicatesWithinBatchAndAgainstExisting() {
+        let store = ShelfStore.shared
+        let original = store.items
+        defer { store.items = original }
+
+        let a = URL(fileURLWithPath: "/tmp/去重样本A-\(UUID().uuidString).txt")
+        let b = URL(fileURLWithPath: "/tmp/去重样本B-\(UUID().uuidString).txt")
+        let baseline = original.count
+
+        // 同一批次里重复出现 → 只入列一次
+        store.add(urls: [a, a, b])
+        XCTAssertEqual(store.items.count, baseline + 2)
+
+        // 再次拖入已有条目 → 不变
+        store.add(urls: [a])
+        XCTAssertEqual(store.items.count, baseline + 2)
+    }
+
+    // MARK: - 维护策略即时生效
+
+    /// 旋主 RunLoop 等条件成立（订阅经主队列异步回调）
+    private func spinMain(timeout: TimeInterval = 3, until condition: () -> Bool) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if condition() { return true }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.02))
+        }
+        return condition()
+    }
+
+    @MainActor
+    func testMaintenancePoliciesApplyImmediatelyWhenSettingsChange() {
+        let store = ShelfStore.shared
+        let settings = AppSettings.shared
+        let originalItems = store.items
+        let originalAutoClean = settings.autoClean
+        let originalMaxItems = settings.maxItems
+        defer {
+            store.items = originalItems
+            settings.autoClean = originalAutoClean
+            settings.maxItems = originalMaxItems
+        }
+
+        settings.autoClean = .off
+        settings.maxItems = .unlimited
+
+        // 容量上限收紧：21 条 → 20 条，淘汰最早加入的
+        let base = Date().addingTimeInterval(-60)
+        store.items = (0..<21).map {
+            ShelfItem(url: URL(fileURLWithPath: "/tmp/维护样本\($0).txt"),
+                      addedAt: base.addingTimeInterval(Double($0)))
+        }
+        settings.maxItems = .m20
+        XCTAssertTrue(spinMain { store.items.count == 20 }, "收紧容量上限应立即生效")
+        XCTAssertEqual(store.items.first?.name, "维护样本1.txt", "应淘汰最早加入的条目")
+
+        // 过期清理收紧：3 天前的条目在「1 天后」策略下立即被清
+        store.items = [
+            ShelfItem(url: URL(fileURLWithPath: "/tmp/维护新鲜.txt"), addedAt: base),
+            ShelfItem(url: URL(fileURLWithPath: "/tmp/维护过期.txt"),
+                      addedAt: Date().addingTimeInterval(-3 * 86_400)),
+        ]
+        settings.maxItems = .unlimited
+        settings.autoClean = .oneDay
+        XCTAssertTrue(spinMain { store.items.count == 1 }, "收紧自动清理应立即清掉过期条目")
+        XCTAssertEqual(store.items.first?.name, "维护新鲜.txt")
+    }
+
+    // MARK: - 路径改写后类型重识别
+
+    @MainActor
+    func testUpdatePathRefreshesKind() {
+        let store = ShelfStore.shared
+        let original = store.items
+        defer { store.items = original }
+
+        let oldURL = URL(fileURLWithPath: "/tmp/改名样本-\(UUID().uuidString).txt")
+        store.add(urls: [oldURL])
+        guard let item = store.items.last, item.path == oldURL.standardizedFileURL.path else {
+            return XCTFail("条目应已入列")
+        }
+        XCTAssertEqual(item.kind.variant, .document)
+
+        // 移动到 .swift 后缀的新路径后，粗分类应随之刷新
+        store.updatePath(id: item.id, to: URL(fileURLWithPath: "/tmp/改名样本.swift"))
+        XCTAssertEqual(store.items.last?.kind.variant, .code)
+    }
 }

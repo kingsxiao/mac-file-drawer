@@ -240,6 +240,7 @@ final class AppSettings: ObservableObject {
         static let maxItems = prefix + "maxItems"
         static let material = prefix + "material"
         static let edge = prefix + "edge"
+        static let showDockIcon = prefix + "showDockIcon"
     }
 
     private let defaults: UserDefaults
@@ -311,6 +312,10 @@ final class AppSettings: ObservableObject {
     @Published var edge: DrawerEdge {
         didSet { defaults.set(edge.rawValue, forKey: Keys.edge) }
     }
+    /// 在 Dock 中显示应用图标（关闭后只保留菜单栏图标，典型工具类应用形态）
+    @Published var showDockIcon: Bool {
+        didSet { defaults.set(showDockIcon, forKey: Keys.showDockIcon) }
+    }
 
     // MARK: 交互
 
@@ -370,7 +375,9 @@ final class AppSettings: ObservableObject {
         didSet { defaults.set(hotKeyLabel, forKey: Keys.hotKeyLabel) }
     }
 
-    /// 便捷读写：无效组合（无功能修饰键）在 get 侧归零为 nil
+    /// 便捷读写：无效组合（无功能修饰键）在 get 侧归零为 nil；
+    /// set 侧同样拒绝无效组合——否则垃圾值落库后 get 变 nil，
+    /// 应用侧会把已注册的热键注销，而界面还显示着无效组合的假标签。
     var hotKeyBinding: HotKeyBinding? {
         get {
             let binding = HotKeyBinding(
@@ -380,7 +387,7 @@ final class AppSettings: ObservableObject {
             return binding.isValid ? binding : nil
         }
         set {
-            guard let newValue else { return }
+            guard let newValue, newValue.isValid else { return }
             hotKeyCode = newValue.keyCode
             hotKeyModifiers = Int(newValue.modifiers.rawValue)
             hotKeyLabel = newValue.displayLabel
@@ -402,6 +409,7 @@ final class AppSettings: ObservableObject {
         panelLevel = DrawerPanelLevel(rawValue: defaults.integer(forKey: Keys.panelLevel)) ?? .floating
         material = DrawerMaterial(rawValue: defaults.integer(forKey: Keys.material)) ?? .ultraThin
         edge = DrawerEdge(rawValue: defaults.integer(forKey: Keys.edge)) ?? .right
+        showDockIcon = defaults.object(forKey: Keys.showDockIcon) as? Bool ?? true
         openOnSingleClick = defaults.bool(forKey: Keys.openOnSingleClick)
         collapseAfterDragOut = defaults.bool(forKey: Keys.collapseAfterDragOut)
         collapseWhenEmpty = defaults.bool(forKey: Keys.collapseWhenEmpty)

@@ -33,51 +33,47 @@ extension ShelfItem {
     }
 }
 
-// MARK: - 拖入：从外部拖拽载荷中取出文件 URL
+// MARK: - 拖入：从外部拖拽载荷中取出文件 URL；文本 / 链接物化成收件箱文件
 
 enum DropFileLoader {
-    static let typeIdentifiers = [UTType.fileURL.identifier]
+    /// 可接收的载荷类型：文件 URL、链接、纯文本
+    static let typeIdentifiers = [
+        UTType.fileURL.identifier,
+        UTType.url.identifier,
+        UTType.utf8PlainText.identifier,
+        UTType.plainText.identifier,
+    ]
 
     /// 异步解析一批拖拽提供者中的所有文件 URL。
-    static func loadAll(from providers: [NSItemProvider], completion: @escaping ([URL]) -> Void) {
+    /// 各 provider 的完成回调可能乱序到达，落位到序号槽位后再输出，保持拖入时的顺序。
+    /// （单个 provider 的解析内部有同步等待，放到并发队列上做，不卡主线程。）
+    static func loadAll(
+        from providers: [NSItemProvider],
+        directory: URL = InboxStore.directory,
+        completion: @escaping ([URL]) -> Void
+    ) {
         guard !providers.isEmpty else {
             completion([])
             return
         }
         let group = DispatchGroup()
-        var collected = [URL]()
+        var results = [URL?](repeating: nil, count: providers.count)
         let lock = NSLock()
 
-        for provider in providers {
+        for (index, provider) in providers.enumerated() {
             group.enter()
-            loadOne(provider) { url in
-                if let url {
-                    lock.lock()
-                    collected.append(url)
-                    lock.unlock()
-                }
+            DispatchQueue.global(qos: .userInitiated).async {
+                let url = InboxStore.url(fromProvider: provider, directory: directory)
+                lock.lock()
+                results[index] = url
+                lock.unlock()
                 group.leave()
             }
         }
 
         group.notify(queue: .main) {
-            completion(collected)
+            completion(results.compactMap { $0 })
         }
-    }
-
-    private static func loadOne(_ provider: NSItemProvider, completion: @escaping (URL?) -> Void) {
-        // 统一走 NSSecureCoding 的 URL 解码（访达与绝大多数应用的标准拖拽形式）
-        guard provider.canLoadObject(ofClass: URL.self) else {
-            complete(nil, completion)
-            return
-        }
-        provider.loadObject(ofClass: URL.self) { obj, _ in
-            complete(obj, completion)
-        }
-    }
-
-    private static func complete(_ url: URL?, _ completion: @escaping (URL?) -> Void) {
-        DispatchQueue.main.async { completion(url) }
     }
 }
 
@@ -93,7 +89,8 @@ extension ShelfItem {
     @MainActor
     func metaLine(settings: AppSettings) -> String {
         var parts: [String] = []
-        if settings.showFileSize { parts.append(ShelfStore.sizeText(for: path)) }
+        // 大小走 Store 缓存：文件夹要列目录，不能每帧渲染都做
+        if settings.showFileSize { parts.append(ShelfStore.shared.cachedSizeText(for: path)) }
         if settings.showAddedTime { parts.append(Self.relativeAdded(addedAt)) }
         return parts.joined(separator: " · ")
     }
