@@ -34,6 +34,7 @@ final class AppSettingsTests: XCTestCase {
             XCTAssertEqual(s.hotKeyBinding?.keyCode, 49)
             XCTAssertEqual(s.hotKeyBinding?.modifiers, .option)
             XCTAssertTrue(s.showDockIcon, "Dock 图标默认开启，保持既有形态")
+            XCTAssertFalse(s.followMouseScreen, "多屏跟随鼠标默认关闭（主屏停靠）")
         }
     }
 
@@ -56,6 +57,7 @@ final class AppSettingsTests: XCTestCase {
             s.autoCollapseOnBlur = true
             s.panelLevel = .normal
             s.showDockIcon = false
+            s.followMouseScreen = true
             s.hotKeyEnabled = true
             s.hotKeyBinding = HotKeyBinding(keyCode: 1, modifiers: [.command, .shift])
 
@@ -71,6 +73,7 @@ final class AppSettingsTests: XCTestCase {
             XCTAssertTrue(reloaded.autoCollapseOnBlur)
             XCTAssertEqual(reloaded.panelLevel, .normal)
             XCTAssertFalse(reloaded.showDockIcon)
+            XCTAssertTrue(reloaded.followMouseScreen, "跟随鼠标屏幕的设置应持久化")
             XCTAssertTrue(reloaded.hotKeyEnabled)
             XCTAssertEqual(reloaded.hotKeyBinding?.keyCode, 1)
             XCTAssertEqual(reloaded.hotKeyBinding?.modifiers, [.command, .shift])

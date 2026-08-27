@@ -200,7 +200,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let store = ShelfStore.shared
         let hostingView = NSHostingView(rootView: ContentView(store: store, interaction: .shared))
 
-        let screen = NSScreen.main ?? NSScreen.screens[0]
+        let screen = DrawerLayout.targetScreen(followMouse: settings.followMouseScreen) ?? NSScreen.screens[0]
         let size = DrawerLayout.expandedSize(visibleFrame: screen.visibleFrame, settings: settings)
 
         panel = DrawerPanel(
@@ -244,7 +244,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // 收起状态变化 → 窗口边框在「抽屉」与「窄边条」之间动画
         InteractionModel.shared.onCollapseChange = { [weak self] collapsed in
             guard let self, self.panel != nil else { return }
-            let screen = NSScreen.main ?? NSScreen.screens[0]
+            let screen = DrawerLayout.targetScreen(followMouse: settings.followMouseScreen) ?? NSScreen.screens[0]
             let target = collapsed
                 ? DrawerLayout.collapsedFrame(visibleFrame: screen.visibleFrame, settings: self.settings)
                 : DrawerLayout.expandedFrame(visibleFrame: screen.visibleFrame, settings: self.settings)
@@ -288,7 +288,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func placeOffscreen() {
         WindowSpringAnimator.shared.cancel()
         panel.setFrame(
-            DrawerLayout.offscreenFrame(visibleFrame: (NSScreen.main ?? NSScreen.screens[0]).visibleFrame, settings: settings),
+            DrawerLayout.offscreenFrame(visibleFrame: (DrawerLayout.targetScreen(followMouse: settings.followMouseScreen) ?? NSScreen.screens[0]).visibleFrame, settings: settings),
             display: false
         )
         isOpen = false
@@ -302,7 +302,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         isOpen = true
         animateFrame(
-            to: DrawerLayout.expandedFrame(visibleFrame: (NSScreen.main ?? NSScreen.screens[0]).visibleFrame, settings: settings)
+            to: DrawerLayout.expandedFrame(visibleFrame: (DrawerLayout.targetScreen(followMouse: settings.followMouseScreen) ?? NSScreen.screens[0]).visibleFrame, settings: settings)
         )
         refreshStatusTitle()
     }
@@ -356,7 +356,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// 按当前状态（展开 / 收起 / 屏幕外）立即贴边定位
     private func repositionPanel() {
-        guard let screen = NSScreen.main ?? NSScreen.screens.first else { return }
+        guard let screen = DrawerLayout.targetScreen(followMouse: settings.followMouseScreen) ?? NSScreen.screens.first else { return }
         // 直接定位前终止弹簧，避免动画把窗口又拉回旧目标
         WindowSpringAnimator.shared.cancel()
         panel.setFrame(targetFrame(for: screen), display: true)

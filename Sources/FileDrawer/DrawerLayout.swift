@@ -12,6 +12,18 @@ enum DrawerLayout {
     static let minDrawerHeight: CGFloat = 360
     static let collapsedTabSize = CGSize(width: 42, height: 190)
 
+    /// 目标屏幕：跟随鼠标时取指针所在屏（多显示器场景），
+    /// 否则主屏；都拿不到时兜底任意一块屏。
+    static func targetScreen(followMouse: Bool) -> NSScreen? {
+        if followMouse {
+            let mouse = NSEvent.mouseLocation
+            if let hit = NSScreen.screens.first(where: { NSMouseInRect(mouse, $0.frame, false) }) {
+                return hit
+            }
+        }
+        return NSScreen.main ?? NSScreen.screens.first
+    }
+
     static func expandedSize(visibleFrame: NSRect, settings: AppSettings) -> CGSize {
         let available = visibleFrame.height - margin * 2
         let height = max(minDrawerHeight, available * CGFloat(settings.drawerHeightRatio))
