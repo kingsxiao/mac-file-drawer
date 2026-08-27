@@ -1,0 +1,9 @@
+# Swift Package Manager 构建产物
+.build/
+build/
+
+# Mimosa 扫描状态
+.mimosa/
+
+# macOS
+.DS_Store
