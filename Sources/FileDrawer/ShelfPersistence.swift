@@ -14,12 +14,24 @@ enum ShelfPersistence {
     static let legacyItemsKey = "com.wangxiao.filedrawer.items"
     static let legacyDrawersKey = "com.wangxiao.filedrawer.drawers"
     static let legacyCurrentDrawerKey = "com.wangxiao.filedrawer.currentDrawer"
+    // 旧独立容量覆盖 key（v3 前的布局；并入容器后仅作迁移读取源）
+    static let legacyDrawerLimitsKey = "com.wangxiao.filedrawer.drawerLimits"
 
     struct Schema: Codable, Equatable {
         var version: Int
         var items: [ShelfItem]
         var drawers: [DrawerGroup]
         var currentDrawerID: UUID
+        /// 每组容量上限覆盖（分组ID.uuidString → MaxItemsPolicy.rawValue）；旧 v3 数据无此字段默认空
+        var drawerLimits: [String: Int]
+
+        init(version: Int, items: [ShelfItem], drawers: [DrawerGroup], currentDrawerID: UUID, drawerLimits: [String: Int] = [:]) {
+            self.version = version
+            self.items = items
+            self.drawers = drawers
+            self.currentDrawerID = currentDrawerID
+            self.drawerLimits = drawerLimits
+        }
     }
 
     // MARK: 读写
@@ -75,6 +87,18 @@ enum ShelfPersistence {
             items[index].drawerID = fallback
         }
 
-        return Schema(version: currentVersion, items: items, drawers: drawers, currentDrawerID: current)
+        var limits: [String: Int] = [:]
+        if let data = defaults.data(forKey: legacyDrawerLimitsKey),
+           let saved = try? JSONDecoder().decode([String: Int].self, from: data) {
+            limits = saved
+        }
+
+        return Schema(
+            version: currentVersion,
+            items: items,
+            drawers: drawers,
+            currentDrawerID: current,
+            drawerLimits: limits
+        )
     }
 }

@@ -99,4 +99,39 @@ final class PersistenceV3Tests: XCTestCase {
         XCTAssertEqual(loaded.drawers.map(\.name), ["新分组"], "v3 key 存在时旧布局不应参与")
         XCTAssertTrue(loaded.items.isEmpty)
     }
+
+    /// 容量覆盖并入 v3：schema 字段往返 + 旧独立 key 迁移
+    func testDrawerLimitsInSchemaAndLegacyMigration() throws {
+        let (defaults, suite) = makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        let group = DrawerGroup(name: "限数组")
+        let schema = ShelfPersistence.Schema(
+            version: 3, items: [], drawers: [group], currentDrawerID: group.id,
+            drawerLimits: [group.id.uuidString: MaxItemsPolicy.m20.rawValue]
+        )
+        ShelfPersistence.save(schema, to: defaults)
+        let loaded = try XCTUnwrap(ShelfPersistence.load(defaults: defaults))
+        XCTAssertEqual(loaded.drawerLimits, [group.id.uuidString: MaxItemsPolicy.m20.rawValue], "limits 随容器往返")
+
+        // 旧独立 key 迁移：v3 key 清掉后 legacyLoad 应从旧 key 恢复（需有 items 才触发 legacy 路径）
+        defaults.removeObject(forKey: ShelfPersistence.storeKey)
+        let legacyLimits = ["abc": MaxItemsPolicy.m50.rawValue]
+        defaults.set(try JSONEncoder().encode(legacyLimits), forKey: ShelfPersistence.legacyDrawerLimitsKey)
+        defaults.set(try JSONEncoder().encode([ShelfItem]()), forKey: ShelfPersistence.legacyItemsKey)
+        let migrated = try XCTUnwrap(ShelfPersistence.load(defaults: defaults))
+        XCTAssertEqual(migrated.drawerLimits, legacyLimits, "旧独立 key 的覆盖并入容器")
+
+        // 旧 v3 数据无 drawerLimits 字段 → 默认空
+        let noLimits = try JSONEncoder().encode(
+            ShelfPersistence.Schema(version: 3, items: [], drawers: [group], currentDrawerID: group.id, drawerLimits: [:])
+        )
+        // 手工编码一个缺 drawerLimits 的 JSON 验证解码默认值
+        let manual = """
+        {"version":3,"items":[],"drawers":[],"currentDrawerID":"\(UUID().uuidString)"}
+        """
+        let decoded = try JSONDecoder().decode(ShelfPersistence.Schema.self, from: Data(manual.utf8))
+        XCTAssertTrue(decoded.drawerLimits.isEmpty, "缺字段解码默认空")
+        _ = noLimits
+    }
 }

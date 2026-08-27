@@ -99,7 +99,6 @@ struct DrawerGroup: Identifiable, Codable, Equatable {
 @MainActor
 final class ShelfStore: ObservableObject {
     static let shared = ShelfStore()
-    private static let drawerLimitsKey = "com.wangxiao.filedrawer.drawerLimits"
     /// 旧数据迁移 / 全新安装时的默认分组名
     nonisolated static let defaultDrawerName = "默认"
     /// 分组容量覆盖表里兜底的「无分组」键（异常数据归入同一名额池）
@@ -121,7 +120,7 @@ final class ShelfStore: ObservableObject {
     }
     /// 每组独立容量上限覆盖（nil = 跟随全局默认 MaxItemsPolicy）
     @Published private(set) var drawerLimitOverrides: [UUID: MaxItemsPolicy] = [:] {
-        didSet { persistDrawerLimits() }
+        didSet { persistSchema() }
     }
 
     /// 缩略图缓存（图片/视频真实预览）
@@ -157,17 +156,14 @@ final class ShelfStore: ObservableObject {
     }
 
     private init() {
-        // v3 容器加载（内部含 v1/v2 旧布局迁移与归一化）；
-        // 每组容量覆盖独立成 key，仍在条目按容量收敛前就位
-        if let data = UserDefaults.standard.data(forKey: Self.drawerLimitsKey),
-           let saved = try? JSONDecoder().decode([String: Int].self, from: data) {
-            drawerLimitOverrides = Dictionary(uniqueKeysWithValues: saved.compactMap { key, value in
+        // v3 容器加载（内部含 v1/v2 旧布局迁移与归一化，容量覆盖已并入容器字段）
+        let schema = ShelfPersistence.load(defaults: .standard)
+        if let limits = schema?.drawerLimits, !limits.isEmpty {
+            drawerLimitOverrides = Dictionary(uniqueKeysWithValues: limits.compactMap { key, value in
                 guard let id = UUID(uuidString: key), let policy = MaxItemsPolicy(rawValue: value) else { return nil }
                 return (id, policy)
             })
         }
-
-        let schema = ShelfPersistence.load(defaults: .standard)
         drawers = schema?.drawers ?? [DrawerGroup(name: Self.defaultDrawerName)]
         if let schema, drawers.contains(where: { $0.id == schema.currentDrawerID }) {
             currentDrawerID = schema.currentDrawerID
@@ -555,15 +551,7 @@ final class ShelfStore: ObservableObject {
 
     // MARK: 分组容量上限（每组可覆盖全局默认）
 
-    /// 覆盖表持久化：[分组ID: 策略rawValue]
-    private func persistDrawerLimits() {
-        let raw = Dictionary(
-            uniqueKeysWithValues: drawerLimitOverrides.map { ($0.key.uuidString, $0.value.rawValue) }
-        )
-        if let data = try? JSONEncoder().encode(raw) {
-            UserDefaults.standard.set(data, forKey: Self.drawerLimitsKey)
-        }
-    }
+    /// 覆盖表已并入 v3 容器（persistSchema 一并写入），独立 key 仅作迁移读取源
 
     /// 某分组的容量覆盖（nil = 跟随全局默认）
     func limitOverride(for drawerID: UUID) -> MaxItemsPolicy? {
@@ -914,7 +902,10 @@ final class ShelfStore: ObservableObject {
                 version: ShelfPersistence.currentVersion,
                 items: items,
                 drawers: drawers,
-                currentDrawerID: currentDrawerID
+                currentDrawerID: currentDrawerID,
+                drawerLimits: Dictionary(
+                    uniqueKeysWithValues: drawerLimitOverrides.map { ($0.key.uuidString, $0.value.rawValue) }
+                )
             ),
             to: .standard
         )
