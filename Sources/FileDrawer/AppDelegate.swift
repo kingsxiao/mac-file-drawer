@@ -573,6 +573,55 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return true
     }
 
+    // MARK: - URL Scheme（filedrawer://add?path=… 等，配合脚本 / 终端自动化）
+
+    func application(_ application: NSApplication, open urls: [URL]) {
+        for url in urls {
+            guard let action = URLRouter.action(for: url) else { continue }
+            perform(action)
+        }
+    }
+
+    private func perform(_ action: URLRouter.Action) {
+        let store = ShelfStore.shared
+        switch action {
+        case .add(let paths):
+            expandDrawer()
+            let valid = paths.filter { FileManager.default.fileExists(atPath: $0) }
+            let invalidCount = paths.count - valid.count
+            guard !valid.isEmpty else {
+                store.postNotice(invalidCount > 0 ? "路径不存在，未放入抽屉" : "未放入任何文件")
+                return
+            }
+            withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) {
+                let result = store.add(urls: valid.map { URL(fileURLWithPath: $0) })
+                var notes: [String] = []
+                if result.skippedDuplicates > 0 {
+                    notes.append("已跳过 \(result.skippedDuplicates) 个重复条目")
+                }
+                if invalidCount > 0 {
+                    notes.append("\(invalidCount) 个路径不存在")
+                }
+                if !notes.isEmpty {
+                    store.postNotice(notes.joined(separator: "，"))
+                }
+            }
+
+        case .reveal(let path):
+            expandDrawer()
+            NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
+
+        case .toggle:
+            toggleCollapseOrExpand()
+
+        case .expand:
+            expandDrawer()
+
+        case .collapse:
+            if !InteractionModel.shared.isCollapsed { collapseDrawer() }
+        }
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         ShelfStore.shared.prepareForTermination()
     }

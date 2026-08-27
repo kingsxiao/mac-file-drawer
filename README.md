@@ -103,6 +103,22 @@
 
 > 键盘只在抽屉持有焦点时接管（单击任意条目即可）；正在搜索框输入时按键完全放行。
 
+## 自动化：URL Scheme
+
+安装 .app 后注册 `filedrawer://`，终端、脚本、快捷指令（Shortcuts）都能驱动抽屉：
+
+```bash
+open "filedrawer://add?path=/tmp/报告.pdf"                 # 放入抽屉（自动展开）
+open "filedrawer://add?path=/tmp/a.pdf&path=/tmp/b.txt"    # 一次放多个
+open "filedrawer://reveal?path=/tmp/报告.pdf"              # 在访达中定位
+open "filedrawer://toggle"                                 # 展开 ↔ 收起
+open "filedrawer://expand"                                 # 展开
+open "filedrawer://collapse"                               # 收起
+```
+
+路径含中文 / 空格时 `open` 会自动做百分号编码，无需手工处理；
+不存在的路径与重复条目会在抽屉里给轻提示。
+
 ## 构建、安装与分发
 
 要求：macOS 14+，装有 Xcode 或仅命令行工具（CLT）皆可。

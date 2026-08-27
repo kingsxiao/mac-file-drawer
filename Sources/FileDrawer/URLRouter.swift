@@ -1,0 +1,55 @@
+import Foundation
+
+// MARK: - URL Scheme 自动化接口
+//
+// 注册 filedrawer:// scheme 后，终端 / 脚本 / 其它应用可通过 open 命令驱动抽屉：
+//   open "filedrawer://add?path=/tmp/报告.pdf"
+//   open "filedrawer://add?path=/tmp/a.pdf&path=/tmp/b.txt"
+//   open "filedrawer://reveal?path=/tmp/报告.pdf"
+//   open "filedrawer://toggle" / expand / collapse
+// 路径含中文或空格时由 open 自动做百分号编码，queryItems 解码后即原始路径。
+
+enum URLRouter {
+    enum Action: Equatable {
+        case add(paths: [String])
+        case reveal(path: String)
+        case toggle
+        case expand
+        case collapse
+    }
+
+    /// 解析 filedrawer:// URL；scheme / host 不认识或参数缺失返回 nil
+    static func action(for url: URL) -> Action? {
+        guard url.scheme?.lowercased() == "filedrawer" else { return nil }
+        guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return nil }
+
+        let host = (components.host ?? "").lowercased()
+        let queryItems = components.queryItems ?? []
+
+        switch host {
+        case "add":
+            let paths = queryItems
+                .filter { $0.name == "path" }
+                .compactMap { $0.value }
+                .filter { !$0.isEmpty }
+            return paths.isEmpty ? nil : .add(paths: paths)
+
+        case "reveal":
+            guard let path = queryItems.first(where: { $0.name == "path" })?.value,
+                  !path.isEmpty else { return nil }
+            return .reveal(path: path)
+
+        case "toggle":
+            return .toggle
+
+        case "expand":
+            return .expand
+
+        case "collapse":
+            return .collapse
+
+        default:
+            return nil
+        }
+    }
+}

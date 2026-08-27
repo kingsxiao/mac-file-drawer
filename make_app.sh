@@ -70,6 +70,17 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <true/>
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLName</key>
+            <string>com.wangxiao.filedrawer</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>filedrawer</string>
+            </array>
+        </dict>
+    </array>
 </dict>
 </plist>
 PLIST
