@@ -73,4 +73,23 @@ final class TileContrastTests: XCTestCase {
         // 混合 50% 黑 → 深一半
         XCTAssertEqual(TypeColorContrast.darken(0xFFFFFF, mix: 0.5), 0x808080)
     }
+
+    /// 预览样本：去重保序、两组比值均达标（设置面板展示与该函数同源）
+    func testPreviewSamplesDedupedAndCompliant() {
+        let hexes: [UInt32] = [0x6C5CE7, 0x6C5CE7, 0x2FA252, 0xE0455F]
+        let samples = TypeColorContrast.previewSamples(from: hexes)
+        XCTAssertEqual(samples.map(\.hex), [0x6C5CE7, 0x2FA252, 0xE0455F], "去重保序")
+        for sample in samples {
+            XCTAssertGreaterThanOrEqual(sample.lightRatio, 3.0 - 0.001)
+            XCTAssertGreaterThanOrEqual(sample.darkRatio, 3.0 - 0.001)
+            XCTAssertGreaterThan(sample.lightRatio, 0)
+            XCTAssertGreaterThan(sample.darkRatio, 0)
+        }
+        // 全目录家族色同样达标（面板展示的完整性前提）
+        let all = TypeColorContrast.previewSamples(
+            from: FileTypeCatalog.allStyles.map { $0.1.colorHex }
+        )
+        XCTAssertGreaterThan(all.count, 20, "家族色应聚出可观的样本数")
+        XCTAssertTrue(all.allSatisfy { $0.lightRatio >= 3.0 - 0.001 && $0.darkRatio >= 3.0 - 0.001 })
+    }
 }

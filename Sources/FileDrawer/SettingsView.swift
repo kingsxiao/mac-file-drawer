@@ -264,6 +264,7 @@ private struct AppearanceSettingsTab: View {
                 Toggle(L10n.t("显示加入时间"), isOn: $settings.showAddedTime)
                 Toggle(L10n.t("显示缩略图（图片 / 视频 / PDF）"), isOn: $settings.showThumbnails)
                     .help(L10n.t("关闭后统一显示类型符号"))
+                TileContrastPreviewSection()
             }
         }
         .formStyle(.grouped)
@@ -420,5 +421,67 @@ private struct RecorderEventLayer: NSViewRepresentable {
             onCancel?()
             return true
         }
+    }
+}
+
+// MARK: - 瓷片对比度预览（设置 · 外观）
+// 家族色的明暗两模式实测预览：底 = 瓷片底色近似（类型色 20% 叠材质），
+// 圆点 = 对比度保障后的符号色，下方是实测 WCAG 比值。
+
+private struct TileContrastPreviewSection: View {
+    /// 家族色去重样本（首次渲染时构建一次）
+    private let samples: [TypeColorContrast.Sample] = {
+        TypeColorContrast.previewSamples(
+            from: FileTypeCatalog.allStyles.map { $0.1.colorHex }
+        )
+    }()
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(L10n.t("瓷片对比度（WCAG）"))
+                .font(.system(size: 12, weight: .semibold))
+            Text(L10n.t("全部类型色在明暗两模式下的符号色实测对比度；不足 3:1 时自动调整（左：浅色，右：深色）。"))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            ScrollView {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 104), spacing: 8)], spacing: 8) {
+                    ForEach(samples) { sample in
+                        swatch(sample)
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+            .frame(maxHeight: 240)
+        }
+        .padding(.vertical, 4)
+    }
+
+    private func swatch(_ sample: TypeColorContrast.Sample) -> some View {
+        VStack(spacing: 3) {
+            HStack(spacing: 4) {
+                cell(base: sample.lightBase, symbol: sample.lightAdjusted)
+                cell(base: sample.darkBase, symbol: sample.darkAdjusted)
+            }
+            Text(String(format: "%.1f:%.1f", sample.lightRatio, sample.darkRatio))
+                .font(.system(size: 9, weight: .medium, design: .monospaced))
+                .monospacedDigit()
+                .foregroundStyle(meetsThreshold(sample) ? .secondary : Color.red)
+        }
+    }
+
+    private func cell(base: UInt32, symbol: UInt32) -> some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(Color(hex: base))
+            Circle()
+                .fill(Color(hex: symbol))
+                .frame(width: 13, height: 13)
+        }
+        .frame(height: 34)
+    }
+
+    private func meetsThreshold(_ sample: TypeColorContrast.Sample) -> Bool {
+        sample.lightRatio >= TypeColorContrast.threshold - 0.001
+            && sample.darkRatio >= TypeColorContrast.threshold - 0.001
     }
 }

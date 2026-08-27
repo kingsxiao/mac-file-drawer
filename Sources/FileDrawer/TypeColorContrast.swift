@@ -79,6 +79,43 @@ enum TypeColorContrast {
         blend(fg: colorHex, over: dark ? darkBase : lightBase, alpha: 0.20)
     }
 
+    // MARK: 预览样本（设置面板「瓷片对比度」区）
+
+    /// 一个类型色的明暗双模式预览：底色近似 + 调整后符号色 + 实测比值
+    struct Sample: Identifiable, Equatable {
+        let id: UInt32 // 即原色 hex
+        let hex: UInt32
+        let lightBase: UInt32
+        let lightAdjusted: UInt32
+        let lightRatio: Double
+        let darkBase: UInt32
+        let darkAdjusted: UInt32
+        let darkRatio: Double
+    }
+
+    /// 一批类型色 → 去重保序的明暗预览样本（视图与测试共用）
+    nonisolated static func previewSamples(from hexes: [UInt32]) -> [Sample] {
+        var seen = Set<UInt32>()
+        var samples: [Sample] = []
+        for hex in hexes where seen.insert(hex).inserted {
+            let lightBase = tileBase(colorHex: hex, dark: false)
+            let light = ensureContrast(symbol: hex, on: lightBase)
+            let darkBase = tileBase(colorHex: hex, dark: true)
+            let dark = ensureContrast(symbol: hex, on: darkBase)
+            samples.append(Sample(
+                id: hex,
+                hex: hex,
+                lightBase: lightBase,
+                lightAdjusted: light.color,
+                lightRatio: contrastRatio(light.color, lightBase),
+                darkBase: darkBase,
+                darkAdjusted: dark.color,
+                darkRatio: contrastRatio(dark.color, darkBase)
+            ))
+        }
+        return samples
+    }
+
     /// 保证符号色在瓷片底色上达到 WCAG 阈值：不足时按底色明暗定向调整——
     /// 暗底向白提亮、亮底向黑加深（步进 5%，封顶 maxLightenMix，保住色相）。
     /// 返回达标色（或尽力调整后的色）与实际混合量。

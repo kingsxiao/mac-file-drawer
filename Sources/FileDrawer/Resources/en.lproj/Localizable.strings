@@ -276,3 +276,7 @@
 "按文件路径把抽屉条目重命名（同目录改名，同名自动追加序号）。" = "Renames a drawer item by file path (same-folder rename, numeric suffix on collision).";
 "文件路径" = "File Path";
 "新名称" = "New Name";
+
+/* 批次38：对比度预览 */
+"瓷片对比度（WCAG）" = "Tile Contrast (WCAG)";
+"全部类型色在明暗两模式下的符号色实测对比度；不足 3:1 时自动调整（左：浅色，右：深色）。" = "Measured symbol contrast for every type color in both modes; values below 3:1 are auto-adjusted (left: light, right: dark).";
