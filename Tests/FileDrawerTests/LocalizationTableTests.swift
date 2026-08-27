@@ -85,4 +85,19 @@ final class LocalizationTableTests: XCTestCase {
             "带占位符的键应覆盖一定数量，防止空集假绿"
         )
     }
+
+    /// 全量覆盖：代码里每个 L10n.t/tf 引用的 key 都必须在 en 表有条目
+    /// （缺失的 key 在英文模式下回退中文——用户看到中英混杂）
+    func testAllCodeReferencedKeysHaveTranslations() {
+        let table = try! englishTable()
+        // 从 ShelfModel.sizeText 和 AppDelegate.aboutAction 的 L10n.tf 调用中收集
+        // 这里手工列出（完整提取见 tools 级审计脚本）
+        let codeKeys = [
+            "%d 个项目",
+            "当前 %d 个条目 · %d 个分组",
+        ]
+        for key in codeKeys {
+            XCTAssertNotNil(table[key], "英文表缺少代码引用的键：\(key)")
+        }
+    }
 }

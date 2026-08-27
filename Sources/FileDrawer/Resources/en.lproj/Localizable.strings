@@ -289,3 +289,7 @@
 
 /* 批次53：热键失败 */
 "热键「%@」注册失败，可能已被其他应用占用" = "Hotkey “%@” registration failed; it may be taken by another app";
+
+/* 批次61：L10n 覆盖度审计补齐 */
+"%d 个项目" = "%d items";
+"当前 %d 个条目 · %d 个分组" = "%d items · %d groups";
