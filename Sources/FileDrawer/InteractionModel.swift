@@ -12,6 +12,7 @@ final class InteractionModel: ObservableObject {
         case timeOldestFirst = 1
         case nameAscending = 2
         case kindThenName = 3
+        case manual = 4
         var id: Int { rawValue }
 
         var label: String {
@@ -20,6 +21,7 @@ final class InteractionModel: ObservableObject {
             case .timeOldestFirst: return "最早加入在前"
             case .nameAscending:   return "按名称 A–Z"
             case .kindThenName:    return "按类型分组"
+            case .manual:          return "手动顺序"
             }
         }
 
@@ -29,6 +31,7 @@ final class InteractionModel: ObservableObject {
             case .timeOldestFirst: return "arrow.up"
             case .nameAscending:   return "textformat.abc"
             case .kindThenName:    return "square.grid.2x2"
+            case .manual:          return "hand.raised"
             }
         }
     }
@@ -101,11 +104,17 @@ final class InteractionModel: ObservableObject {
                     ? $0.kind.variantSortRank < $1.kind.variantSortRank
                     : $0.name.localizedStandardCompare($1.name) == .orderedAscending
             }
+        case .manual:
+            return items // 数组顺序即手动顺序
         }
     }
 
     func displayItems(from items: [ShelfItem]) -> [ShelfItem] {
-        Self.sorted(Self.filter(items, query: searchText), by: sortMode)
+        let filtered = Self.filter(items, query: searchText)
+        // 置顶条目永远浮在最前；置顶 / 普通两组内部各自按当前排序
+        let pinned = Self.sorted(filtered.filter(\.pinned), by: sortMode)
+        let rest = Self.sorted(filtered.filter { !$0.pinned }, by: sortMode)
+        return pinned + rest
     }
 
     // MARK: 选择与预览

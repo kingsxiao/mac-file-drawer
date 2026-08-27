@@ -11,6 +11,8 @@ struct ShelfItem: Identifiable, Codable, Equatable {
     let id: UUID
     var path: String
     var addedAt: Date
+    /// 置顶：排序时浮到最前，且免于过期清理与容量淘汰
+    var pinned: Bool
     /// 类型识别（含一次磁盘 stat）在构造时算好存起来；
     /// 渲染路径每次 body 都会读它，现场重算会让悬停/滚动每帧都打 I/O。
     /// 文件被原地替换成别的类型属罕见场景，不值得为此每帧重识别。
@@ -21,24 +23,27 @@ struct ShelfItem: Identifiable, Codable, Equatable {
     }
 
     /// 测试与工具场景：可注入确定的时间
-    init(url: URL, addedAt: Date) {
+    init(url: URL, addedAt: Date, pinned: Bool = false) {
         self.id = UUID()
         self.path = url.standardizedFileURL.path
         self.addedAt = addedAt
+        self.pinned = pinned
         self.kind = FileKind(url: url)
     }
 
     var url: URL { URL(fileURLWithPath: path) }
     var name: String { url.lastPathComponent }
 
-    // 持久化格式只含 id/path/addedAt；kind 由 path 反推，避免冗余与失同步
-    private enum CodingKeys: String, CodingKey { case id, path, addedAt }
+    // 持久化格式只含 id/path/addedAt/pinned；kind 由 path 反推，避免冗余与失同步
+    private enum CodingKeys: String, CodingKey { case id, path, addedAt, pinned }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.id = try container.decode(UUID.self, forKey: .id)
         self.path = try container.decode(String.self, forKey: .path)
         self.addedAt = try container.decode(Date.self, forKey: .addedAt)
+        // 旧版本持久化里没有 pinned：默认未置顶
+        self.pinned = try container.decodeIfPresent(Bool.self, forKey: .pinned) ?? false
         self.kind = FileKind(url: URL(fileURLWithPath: path))
     }
 
@@ -47,6 +52,7 @@ struct ShelfItem: Identifiable, Codable, Equatable {
         try container.encode(id, forKey: .id)
         try container.encode(path, forKey: .path)
         try container.encode(addedAt, forKey: .addedAt)
+        try container.encode(pinned, forKey: .pinned)
     }
 }
 
@@ -198,25 +204,78 @@ final class ShelfStore: ObservableObject {
         sizeTextCache.removeValue(forKey: oldPath)
     }
 
+    // MARK: 置顶 / 手动排序
+
+    /// 批量置顶/取消：只要有一个未置顶就统一置顶，否则统一取消（访达标签式语义）
+    func setPinned(_ pinned: Bool, for ids: Set<UUID>) {
+        guard items.contains(where: { ids.contains($0.id) && $0.pinned != pinned }) else { return }
+        withAnimation(DrawerMotion.smooth) {
+            for index in items.indices where ids.contains(items[index].id) {
+                items[index].pinned = pinned
+            }
+        }
+    }
+
+    /// 批量切换置顶态（右键菜单入口）
+    func togglePinned(for targets: [ShelfItem]) {
+        setPinned(!targets.allSatisfy(\.pinned), for: Set(targets.map(\.id)))
+    }
+
+    /// 手动排序：整批平移 offset 行（-1 上移 / +1 下移）。
+    /// 移动跳过不同置顶分区的邻居，保证可见顺序真的变化；一次赋值一次落盘。
+    func nudge(ids: [UUID], by offset: Int) {
+        guard offset == -1 || offset == 1 else { return }
+        var next = items
+        // 连续同向平移时按行进方向处理，前面的条目腾出位置后面的才能跟上
+        let ordered = offset < 0 ? ids : ids.reversed()
+        for id in ordered {
+            guard let index = next.firstIndex(where: { $0.id == id }) else { continue }
+            let pinned = next[index].pinned
+            var neighbor = index + offset
+            while neighbor >= 0, neighbor < next.count, next[neighbor].pinned != pinned {
+                neighbor += offset
+            }
+            guard neighbor >= 0, neighbor < next.count else { continue }
+            let moved = next.remove(at: index)
+            next.insert(moved, at: neighbor)
+        }
+        guard next != items else { return }
+        withAnimation(DrawerMotion.smooth) { items = next }
+    }
+
+    /// 手动排序：整批（保持 items 内相对顺序）移到最前 / 最后
+    func send(ids: [UUID], toFront: Bool) {
+        let set = Set(ids)
+        guard set.count > 0, items.contains(where: { set.contains($0.id) }) else { return }
+        let moved = items.filter { set.contains($0.id) }
+        let rest = items.filter { !set.contains($0.id) }
+        let next = toFront ? moved + rest : rest + moved
+        guard next != items else { return }
+        withAnimation(DrawerMotion.smooth) { items = next }
+    }
+
     // MARK: 维护策略（纯函数，可单测）
 
-    /// 过期自动清理：丢弃加入时间早于策略窗口的条目
+    /// 过期自动清理：丢弃加入时间早于策略窗口的条目；置顶条目豁免
     nonisolated static func pruned(_ items: [ShelfItem], policy: AutoCleanPolicy, now: Date = Date()) -> [ShelfItem] {
         guard let days = policy.days else { return items }
         let cutoff = now.addingTimeInterval(-Double(days) * 86_400)
-        return items.filter { $0.addedAt >= cutoff }
+        return items.filter { $0.pinned || $0.addedAt >= cutoff }
     }
 
-    /// 容量上限：超出时淘汰最早加入的条目，保留原有相对顺序
+    /// 容量上限：超出时淘汰最早加入的非置顶条目，保留原有相对顺序；置顶条目不占淘汰名额但保留
     nonisolated static func trimmed(_ items: [ShelfItem], limit: MaxItemsPolicy) -> [ShelfItem] {
-        guard let max = limit.count, items.count > max else { return items }
+        guard let maxCount = limit.count, items.count > maxCount else { return items }
+        let pinnedCount = items.filter(\.pinned).count
+        let budget = Swift.max(0, maxCount - pinnedCount)
         let keep = Set(
             items
+                .filter { !$0.pinned }
                 .sorted { $0.addedAt > $1.addedAt }
-                .prefix(max)
+                .prefix(budget)
                 .map(\.id)
         )
-        return items.filter { keep.contains($0.id) }
+        return items.filter { $0.pinned || keep.contains($0.id) }
     }
 
     /// 按当前「过期清理 + 容量上限」策略收敛条目（设置调整时即时调用）

@@ -573,6 +573,19 @@ private struct ItemRow: View {
     var body: some View {
         HStack(spacing: settings.compactRows ? 8 : 10) {
             FileTile(item: item, store: store, size: tileSize)
+                .overlay(alignment: .topLeading) {
+                    if item.pinned {
+                        // 置顶角标：品牌色小图钉，压在瓷片左上角
+                        Image(systemName: "pin.fill")
+                            .font(.system(size: 7, weight: .bold))
+                            .foregroundStyle(.white)
+                            .padding(3)
+                            .background(Circle().fill(DrawerTheme.accentGradient))
+                            .overlay(Circle().strokeBorder(.white.opacity(0.45), lineWidth: 0.6))
+                            .offset(x: -3, y: -3)
+                            .help("已置顶 · 免于自动清理")
+                    }
+                }
                 .scaleEffect(hovered ? 1.07 : 1)
                 .animation(.spring(response: 0.28, dampingFraction: 0.6), value: hovered)
 
@@ -749,6 +762,16 @@ private struct ItemRow: View {
             NSWorkspace.shared.activateFileViewerSelecting(targets.map(\.url))
         }
         Divider()
+        Button(targets.allSatisfy(\.pinned) ? "取消置顶\(countSuffix(targets))" : "置顶\(countSuffix(targets))") {
+            store.togglePinned(for: targets)
+        }
+        Menu("调整顺序") {
+            Button("移到最前") { reorderTargets(targets, sendToFront: true) }
+            Button("上移") { reorderTargets(targets, nudge: -1) }
+            Button("下移") { reorderTargets(targets, nudge: 1) }
+            Button("移到最后") { reorderTargets(targets, sendToFront: false) }
+        }
+        Divider()
         Button("拷贝文件\(countSuffix(targets))") { ClipboardSupport.copyFiles(targets) }
         Button("拷贝路径\(countSuffix(targets))") { copyPaths(targets) }
         Button("移动到文件夹…\(countSuffix(targets))") { moveToFolder(targets) }
@@ -758,6 +781,18 @@ private struct ItemRow: View {
         Divider()
         Button("移除\(countSuffix(targets))", role: .destructive) {
             removeTargets(targets)
+        }
+    }
+
+    /// 手动调整顺序：首次使用自动切换到「手动顺序」排序
+    private func reorderTargets(_ targets: [ShelfItem], nudge: Int? = nil, sendToFront: Bool? = nil) {
+        withAnimation(DrawerMotion.smooth) {
+            if interaction.sortMode != .manual { interaction.sortMode = .manual }
+            if let nudge {
+                store.nudge(ids: targets.map(\.id), by: nudge)
+            } else if let sendToFront {
+                store.send(ids: targets.map(\.id), toFront: sendToFront)
+            }
         }
     }
 

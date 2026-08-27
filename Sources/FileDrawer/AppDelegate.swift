@@ -68,6 +68,17 @@ final class KeyboardRouter {
             return nil
         }
 
+        // Cmd+↑ / Cmd+↓：手动排序下平移选中条目（自动切入「手动顺序」）
+        if flags == .command, event.keyCode == 126 || event.keyCode == 125 {
+            let targets = model.selectedItems(in: displayed)
+            guard !targets.isEmpty else { return event }
+            withAnimation(DrawerMotion.smooth) {
+                if model.sortMode != .manual { model.sortMode = .manual }
+                store.nudge(ids: targets.map(\.id), by: event.keyCode == 126 ? -1 : 1)
+            }
+            return nil
+        }
+
         switch Int(event.keyCode) {
         case 49: // Space：开/关预览
             if model.isPreviewVisible {
