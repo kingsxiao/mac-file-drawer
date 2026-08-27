@@ -564,6 +564,9 @@ private struct ItemRow: View {
     @State private var entered = false
     /// 刚拖入的新条目：行底扫过一道品牌色光
     @State private var appearGlow = false
+    /// 重命名弹窗
+    @State private var renameVisible = false
+    @State private var renameText = ""
 
     /// 是否为"刚刚加入"的条目（区分首屏恢复与新拖入，两者动效不同）
     private var isFreshArrival: Bool {
@@ -706,6 +709,17 @@ private struct ItemRow: View {
         .help(settings.openOnSingleClick
               ? "单击打开 · ⌘点击多选 · 空格预览 · Delete 移除"
               : "单击选中 · ⌘/⇧点击多选 · 双击打开 · 空格预览 · Delete 移除")
+        .alert("重命名「\(item.name)」", isPresented: $renameVisible) {
+            TextField("新名称", text: $renameText)
+            Button("重命名") {
+                if !store.rename(id: item.id, to: renameText) {
+                    NSSound.beep()
+                }
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("将同时修改磁盘上的文件；同名文件会自动追加序号。")
+        }
         .onAppear {
             store.ensureThumb(for: item)
             if isFreshArrival {
@@ -817,6 +831,10 @@ private struct ItemRow: View {
         Button("拷贝路径\(countSuffix(targets))") { copyPaths(targets) }
         Button("移动到文件夹…\(countSuffix(targets))") { moveToFolder(targets) }
         if targets.count == 1 {
+            Button("重命名…") {
+                renameText = item.name
+                renameVisible = true
+            }
             Button("另存为…") { exportItem() }
         }
         Divider()

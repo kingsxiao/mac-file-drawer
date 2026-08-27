@@ -216,6 +216,26 @@ final class ShelfStore: ObservableObject {
         sizeTextCache.removeValue(forKey: oldPath)
     }
 
+    /// 重命名条目文件（同目录改名；目标名已存在时自动追加 " 2" 序号）。
+    /// 名称未变化视为成功；文件不存在或移动失败返回 false。
+    @discardableResult
+    func rename(id: UUID, to rawName: String) -> Bool {
+        guard let item = items.first(where: { $0.id == id }) else { return false }
+        guard FileManager.default.fileExists(atPath: item.path) else { return false }
+        guard let newName = InboxStore.sanitize(rawName, maxLength: 120), !newName.isEmpty else { return false }
+        guard newName != item.name else { return true }
+        let directory = item.url.deletingLastPathComponent()
+        let destination = InboxStore.uniqueSiblingURL(fileName: newName, directory: directory)
+        guard destination != item.url else { return true }
+        do {
+            try FileManager.default.moveItem(at: item.url, to: destination)
+            withAnimation(DrawerMotion.smooth) { updatePath(id: id, to: destination) }
+            return true
+        } catch {
+            return false
+        }
+    }
+
     // MARK: 置顶 / 手动排序
 
     /// 批量置顶/取消：只要有一个未置顶就统一置顶，否则统一取消（访达标签式语义）
