@@ -115,80 +115,56 @@
 
 > 键盘只在抽屉持有焦点时接管（单击任意条目即可）；正在搜索框输入时按键完全放行。
 
-## 自动化：URL Scheme
+## 自动化：URL Scheme 与快捷指令（Shortcuts）
 
-安装 .app 后注册 `filedrawer://`，终端、脚本、快捷指令（Shortcuts）都能驱动抽屉：
+抽屉的全部核心操作都可被脚本、终端、快捷指令与 Siri 驱动。安装 .app 后注册
+`filedrawer://` scheme；快捷指令 App 里有同名动作（App Intents）。两条路径共用
+`DrawerCommands`，行为永远一致。
 
-```bash
-open "filedrawer://add?path=/tmp/报告.pdf"                          # 放入抽屉（自动展开）
-open "filedrawer://add?path=/tmp/a.pdf&group=工作"                  # 放入指定分组（不存在则创建）
-open "filedrawer://add?path=/tmp/a.pdf&path=/tmp/b.txt"             # 一次放多个
-open "filedrawer://reveal?path=/tmp/报告.pdf"                       # 在访达中定位
-open "filedrawer://toggle"                                          # 展开 ↔ 收起
-open "filedrawer://expand"                                          # 展开
-open "filedrawer://collapse"                                        # 收起
-open "filedrawer://remove?group=工作&limit=3"                       # 移除分组最新 3 条（0=全部，可还原）
-open "filedrawer://clear?group=工作"                                # 清空分组（可还原）
-open "filedrawer://pin?group=工作&limit=3"                          # 置顶最新 3 条（unpin 取消）
-open "filedrawer://send-to-front?group=工作&limit=5"                # 最新 5 条移到最前（自动切手动顺序）
-open "filedrawer://move?group=下载&to=归档&limit=2"                 # 最新 2 条移到「归档」分组（不存在则建）
-open "filedrawer://rename?path=/tmp/a.txt&name=b.txt"              # 按路径重命名条目
-```
+### URL 动作参考（11 个）
 
-路径含中文 / 空格时 `open` 会自动做百分号编码，无需手工处理；
-不存在的路径与重复条目会在抽屉里给轻提示。
-
-**快捷指令（Shortcuts）深度集成**：安装 .app 后，「快捷指令」App 里直接可用三个动作
-（也支持 Siri 短语「放入 FileDrawer 抽屉」等）——
-
-- **放入抽屉**：接收前序动作输出的文件，放进指定分组（不存在则创建），返回实际新增数；
-- **读取抽屉**：把抽屉 / 指定分组的文件（最新在前、可选上限）作为输出交给后续动作；
-- **展开抽屉**：展开 / 收起 / 两态切换；
-- **移除抽屉条目** / **清空抽屉分组**：按分组移除最新 N 条（0=全部）或整组清空，
-  都走抽屉内「还原」路径——「读取 → 处理 → 移除已处理」的自动化闭环由此打通。
-
-URL Scheme 与快捷指令走同一条命令路径（`DrawerCommands`），行为永远一致。
-
-## 构建、安装与分发
-
-要求：macOS 14+，装有 Xcode 或仅命令行工具（CLT）皆可。
-
-**一键安装**（自动构建 → 退出旧实例 → 安装到 /Applications → 启动，可重复执行）：
+| 动作 | 参数 | 说明 |
+| --- | --- | --- |
+| `add` | `path=`（可多个）、`group=`（可选） | 放入抽屉 / 指定分组（不存在则建并切换），展开抽屉 |
+| `reveal` | `path=` | 在访达中定位文件 |
+| `remove` | `group=`、`limit=`（0=全部） | 移除分组最新 N 条，可在抽屉内「还原」 |
+| `clear` | `group=` | 清空分组，可在抽屉内「还原」 |
+| `pin` / `unpin` | `group=`、`limit=`（0=全部） | 置顶 / 取消置顶最新 N 条（免于自动清理） |
+| `send-to-front` | `group=`、`limit=`（0=全部） | 最新 N 条移到最前，自动切「手动顺序」 |
+| `move` | `group=`（源）、`to=`（目标，不存在则建且不切视图）、`limit=` | 条目整批移到目标分组 |
+| `rename` | `path=`、`name=` | 按路径重命名条目（同目录，同名自动序号） |
+| `toggle` / `expand` / `collapse` | — | 展开 ↔ 收起 / 展开 / 收起 |
 
 ```bash
-make install             # 等价于 ./install.sh（git 检出的脚本自带执行位）
+open "filedrawer://add?path=/tmp/报告.pdf&group=工作"            # 放入「工作」分组
+open "filedrawer://move?group=下载&to=归档&limit=2"              # 最新 2 条移到「归档」
+open "filedrawer://send-to-front?group=工作&limit=5"             # 最新 5 条置前
+open "filedrawer://pin?group=工作&limit=3"                       # 置顶最新 3 条（unpin 取消）
+open "filedrawer://remove?group=工作&limit=3"                    # 移除最新 3 条（可还原）
+open "filedrawer://clear?group=工作"                             # 清空分组（可还原）
+open "filedrawer://rename?path=/tmp/a.txt&name=b.txt"           # 按路径重命名
+open "filedrawer://toggle"                                       # 展开 ↔ 收起
 ```
 
-可选参数：`--app-dir <目录>` 装到别处、`--universal` 出通用二进制（arm64 + x86_64）、
-`--no-launch` 装完不启动、`--skip-build` 复用上次产物。
+路径含中文 / 空格时 `open` 自动做百分号编码；不存在的路径与重复条目在抽屉里给轻提示。
+URL 形式不返回数据——需要读取条目内容时用下面的「读取抽屉条目」意图。
 
-**仅构建 / 开发调试**：
+### 快捷指令（App Intents，9 个动作 + 7 条 Siri 短语）
 
-```bash
-make app                # 打包 build/FileDrawer.app（= ./make_app.sh），open build/FileDrawer.app 即可试跑
-swift build             # 编译调试版
-swift test              # 运行单元测试（含拖拽往返一致性测试；或 make test）
-```
+| 动作 | 参数 | 返回 |
+| --- | --- | --- |
+| 放入抽屉 | 文件[]、分组（可选） | 新增数 |
+| 读取抽屉 | 分组（可选）、最多返回（默认 50） | 文件[]（最新在前） |
+| 移除抽屉条目 | 分组（可选）、数量（0=全部） | 移除数（可还原） |
+| 清空抽屉分组 | 分组（可选） | 清掉数（可还原） |
+| 置顶抽屉条目 | 分组（可选）、数量、置顶（开关） | 受影响数 |
+| 条目移到最前 | 分组（可选）、数量 | 移动数 |
+| 移动条目到分组 | 分组（可选）、目标分组、数量 | 移动数 |
+| 重命名抽屉条目 | 文件路径、新名称 | 是否成功 |
+| 展开抽屉 | 动作（切换/展开/收起） | — |
 
-**卸载**（退出应用 → 删除 .app → 清偏好设置；收件箱数据默认保留）：
-
-```bash
-make uninstall                  # 等价于 ./uninstall.sh
-make uninstall PURGE=1          # 连 ~/Library/Application Support/FileDrawer 一并删除
-```
-
-**分发给别人**：
-
-```bash
-make dmg                # 等价于 ./make_dmg.sh，产出 build/FileDrawer-<版本>-<架构>.dmg
-```
-
-DMG 里带「拖入 Applications」的符号链接；也可在 GitHub Actions 最新一次运行的
-Artifacts 里直接下载 `FileDrawer-universal.zip` / `.dmg`（CI 会构建通用二进制）。
-因为本项目只做临时签名（ad-hoc，无 Developer ID 证书），别人首次打开会被
-Gatekeeper 拦一下：在访达里**右键 → 打开**放行，或先执行
-`xattr -dr com.apple.quarantine FileDrawer.app`。
-
+Siri 短语示例：「放入 FileDrawer 抽屉」「读取 FileDrawer 抽屉条目」「清空 FileDrawer 的抽屉分组」。
+「读取 → 处理 → 移除已处理」的自动化闭环由此打通。
 
 ## 使用方法
 
