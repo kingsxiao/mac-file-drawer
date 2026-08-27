@@ -48,4 +48,41 @@ final class LocalizationTableTests: XCTestCase {
             XCTAssertFalse(value.isEmpty, "键「\(key)」的英文值为空")
         }
     }
+
+    /// 带格式占位符的键：英文值的占位符序列（类型与顺序）必须与中文键一致。
+    /// String(format:) 按位置绑定参数——顺序错位会把 %@ 绑到 Int 上（未定义行为/崩溃）。
+    func testFormatSpecifierSequencesMatch() throws {
+        let table = try englishTable()
+
+        func specifiers(_ s: String) -> [String] {
+            // 抽取 %d / %@（忽略 %% 转义）
+            var result: [String] = []
+            var iterator = s.makeIterator()
+            while let ch = iterator.next() {
+                guard ch == "%" else { continue }
+                if let next = iterator.next() {
+                    if next == "%" { continue }
+                    if next == "d" || next == "@" { result.append("%\(next)") }
+                }
+            }
+            return result
+        }
+
+        var mismatches: [String] = []
+        for (key, value) in table where key.contains("%") {
+            let expected = specifiers(key)
+            let actual = specifiers(value)
+            if expected != actual {
+                mismatches.append("「\(key)」 key=\(expected) value=\(actual)")
+            }
+        }
+        XCTAssertTrue(
+            mismatches.isEmpty,
+            "英文值占位符序列与键不一致（String(format:) 按位绑定，错位即崩溃）：\n\(mismatches.joined(separator: "\n"))"
+        )
+        XCTAssertGreaterThan(
+            table.filter { $0.key.contains("%") }.count, 10,
+            "带占位符的键应覆盖一定数量，防止空集假绿"
+        )
+    }
 }

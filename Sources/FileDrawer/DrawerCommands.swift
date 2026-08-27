@@ -91,8 +91,10 @@ enum DrawerCommands {
     @discardableResult
     static func clearGroup(_ group: String? = nil) -> Int {
         let store = ShelfStore.shared
+        // 指定了分组名但未命中时拒绝执行——绝不能误清当前正在看的分组
+        guard let drawerID = drawerID(named: group) else { return 0 }
         // clear() 的作用域是当前分组：目标是其他分组时先切换
-        if let drawerID = drawerID(named: group), drawerID != store.currentDrawerID {
+        if drawerID != store.currentDrawerID {
             store.switchDrawer(to: drawerID)
         }
         let before = store.currentItems.count

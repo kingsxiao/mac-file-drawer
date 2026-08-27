@@ -104,6 +104,8 @@ final class RemoveClearAutomationTests: XCTestCase {
             XCTAssertEqual(store.items.filter { resolved($0, groupID) }.count, 0)
             // 已清空的分组再清返回 0（且不覆盖上一条可还原快照）
             XCTAssertEqual(DrawerCommands.clearGroup(groupName), 0)
+            // 未知分组名：拒绝执行，绝不能误清当前分组
+            XCTAssertEqual(DrawerCommands.clearGroup("拼错的分组名-\(UUID())"), 0)
             XCTAssertNotNil(store.undoSnapshot, "清空也走可还原路径")
             XCTAssertEqual(store.undoLastRemoval(), 2)
         }

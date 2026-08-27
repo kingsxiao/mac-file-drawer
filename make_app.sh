@@ -8,7 +8,7 @@ cd "$(dirname "$0")"
 
 # 版本号唯一来源：发版只改这两行（关于面板、DMG 文件名都从产物里读）
 VERSION="1.6.0"
-BUILD="7"
+BUILD="8"
 
 # 工具链探测：已设置 DEVELOPER_DIR 则尊重；否则优先完整版 Xcode；都没有就用 xcode-select 当前选择（纯 CLT 也能编译本项目）
 if [[ -z "$DEVELOPER_DIR" && -d /Applications/Xcode.app/Contents/Developer ]]; then

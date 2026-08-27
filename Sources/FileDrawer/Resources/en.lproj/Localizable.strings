@@ -25,7 +25,7 @@
 "已导出 %d 个条目" = "Exported %d items";
 "%d 个失效条目已跳过" = "%d missing items skipped";
 "%d 个拷贝失败" = "%d copies failed";
-"把「%@」分组的 %d 个条目拷贝到所选文件夹" = "Copy %d items from group “%@” to the selected folder";
+"把「%@」分组的 %d 个条目拷贝到所选文件夹" = "Copy group “%@” (%d items) to the selected folder";
 "选择要放进抽屉的文件或文件夹" = "Choose files or folders to put in the drawer";
 "放入抽屉" = "Put in Drawer";
 "导出到这里" = "Export Here";
