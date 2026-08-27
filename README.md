@@ -289,12 +289,36 @@ make_app.sh / install.sh / uninstall.sh / make_dmg.sh / Makefile
   `level = .floating` + `canJoinAllSpaces`，右缘对齐、左侧大圆角 +
   `.ultraThinMaterial` 毛玻璃底；显隐动画由 `WindowSpringAnimator` 用弹簧物理
   逐帧移动 frame（欠阻尼，带轻微过冲回弹），收起/展开都有真实的"抽屉手感"。
-- **拖出**：`onDrag { item.dragProvider() }`。provider 同时注册
+- **多屏**：停靠屏幕由 `DrawerLayout.targetScreen(followMouse:)` 统一解析——
+  可选「展开时停靠到鼠标所在屏幕」（在哪块屏唤出就贴哪块屏），显示器热插拔即时重贴边。
+- **单文件拖出**：`onDrag { item.dragProvider() }`。provider 同时注册
   *文件表示*（接收端拿到真实文件副本）与 *file-url 数据表示*（通用地址语义）。
+- **多选拖出**：多选时瓷片上叠一层 `MultiDragSourceView`（`NSDraggingSession`
+  拖拽源），一次把全部选中条目作为多条 `fileURL` 粘贴板拖出（×N 角标预览）；
+  非多选时该层隐藏（`hitTest` 忽略），一切常规交互不受影响。
 - **拖入**：`.onDrop(of: [.fileURL, .url, .utf8PlainText, .plainText], delegate:)`，
   逐个解析 provider（优先 `loadObject(ofClass: URL.self)`，兜底原始数据），批量入列并去重；
   文本 / 链接载荷先经 `InboxStore` 物化成收件箱里的真实文件再入列——
-  排序、缩略图、拖出、QuickLook 对它们与普通文件完全一致。
+  排序、缩略图、拖出、QuickLook 对它们与普通文件完全一致；富文本粘贴走 RTF→纯文本回退。
+- **行内拖拽排序**：排序把手 provider 附带一个**仅本进程可见的自定义 UTType** 载荷；
+  行级接收器只认该类型（外部文件拖入自然落到抽屉级接收器、拖到行外取消），
+  落到目标行上即整批前插并自动切「手动顺序」，跨置顶分区拖拽顺带切换置顶态。
+- **多抽屉分组**：`ShelfItem.drawerID` + `DrawerGroup`，头部菜单切换/新建/重命名/删除
+  （删除时条目移到剩余分组，最后一个不可删）；每组独立记忆排序方式与容量上限；
+  旧数据（v1 平铺数组 / v2 隐式分组字段）在 `ShelfPersistence` 迁移进 v3 版本化容器。
+- **搜索**：名称多关键字取交集 + `kind:` 类型语法（中英文别名）；
+  名称未命中时防抖 350ms 用 `NSMetadataQuery` 检索 `kMDItemTextContent` 补充
+  「内容匹配」结果（3 秒超时、查询串转义、设置可关）。
+- **自动化**：`DrawerCommands` 是唯一业务入口，`filedrawer://` URL（`URLRouter` 解析）
+  与快捷指令 App Intents（`perform → run` 拼装层）都委托它——两条路径行为永远一致；
+  移除/清空类动作全部走可还原路径。URL 冒烟（`make smoke-automation`）与
+  Intents 拼装层测试对等地覆盖这两条路径。
+- **本地化**：中文原文即 key（基准语言），英文值集中 `en.lproj/Localizable.strings`，
+  `L10n.t` 未命中回退中文——增量迁移永远不会出现 key 乱码；切换语言即时重建
+  抽屉/菜单/设置面板，无需重启；App Intents 面板字符串靠主包 `.lproj`（打包时同源复制）。
 - **撤销**：用户发起的移除 / 清空 / 清理失效条目会记录 `RemovalSnapshot`（条目 + 原位置），
   底部提示条 4.5 秒内可一键还原；新的移除会顶掉旧快照，策略清理（容量淘汰 / 过期收敛）不记录。
   收件箱物化文件在条目移除且撤销窗口关闭后才由 `sweep` 回收，保证「移除 → 反悔」永远成立。
+- **可观测与稳健性**：诊断日志（内存环形 200 条 + os_log 双写，菜单栏可导出）埋点全部
+  自动化动作与迁移事件；条目落盘 150ms 防抖、退出即 flush；失效条目后台扫描（合并重扫）
+  只影响展示不自动删；CI 带 release 零警告门禁。
