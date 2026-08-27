@@ -414,6 +414,13 @@ private struct DrawerDropDelegate: DropDelegate {
     let interaction: InteractionModel
     @Binding var isTargeted: Bool
 
+    /// 内部排序拖拽落到行外（列表空隙 / 头部）= 取消，不当外部文件「放入」；
+    /// 真正的外部文件拖拽没有内部标记，照常接收
+    func validateDrop(info: DropInfo) -> Bool {
+        guard info.itemProviders(for: [ReorderDrag.type]).isEmpty else { return false }
+        return !info.itemProviders(for: DropFileLoader.typeIdentifiers).isEmpty
+    }
+
     func dropEntered(info: DropInfo) {
         isTargeted = true
         revealIfNeeded()
@@ -726,11 +733,6 @@ private struct ItemRow: View {
     var body: some View {
         HStack(spacing: settings.compactRows ? 8 : 10) {
             tileWithOverlays
-
-            VStack(alignment: .leading, spacing: settings.compactRows ? 1.5 : 2.5) {
-                nameRow
-                metaRow
-            }
 
             VStack(alignment: .leading, spacing: settings.compactRows ? 1.5 : 2.5) {
                 nameRow
