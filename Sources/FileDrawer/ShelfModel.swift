@@ -99,12 +99,9 @@ struct DrawerGroup: Identifiable, Codable, Equatable {
 @MainActor
 final class ShelfStore: ObservableObject {
     static let shared = ShelfStore()
-    private static let defaultsKey = "com.wangxiao.filedrawer.items"
-    private static let drawersKey = "com.wangxiao.filedrawer.drawers"
-    private static let currentDrawerKey = "com.wangxiao.filedrawer.currentDrawer"
     private static let drawerLimitsKey = "com.wangxiao.filedrawer.drawerLimits"
     /// 旧数据迁移 / 全新安装时的默认分组名
-    static let defaultDrawerName = "默认"
+    nonisolated static let defaultDrawerName = "默认"
     /// 分组容量覆盖表里兜底的「无分组」键（异常数据归入同一名额池）
     nonisolated static let unassignedDrawerID = UUID(uuidString: "00000000-0000-0000-0000-000000000000")!
 
@@ -160,23 +157,8 @@ final class ShelfStore: ObservableObject {
     }
 
     private init() {
-        // 分组：读取旧值或全新创建；至少保证一个分组存在。
-        // （init 内赋值不触发 didSet，末尾显式 persistDrawers）
-        if let data = UserDefaults.standard.data(forKey: Self.drawersKey),
-           let decoded = try? JSONDecoder().decode([DrawerGroup].self, from: data),
-           !decoded.isEmpty {
-            drawers = decoded
-        } else {
-            drawers = [DrawerGroup(name: Self.defaultDrawerName)]
-        }
-        if let raw = UserDefaults.standard.string(forKey: Self.currentDrawerKey),
-           let id = UUID(uuidString: raw),
-           drawers.contains(where: { $0.id == id }) {
-            currentDrawerID = id
-        } else {
-            currentDrawerID = drawers[0].id
-        }
-        // 每组容量覆盖（要在条目按容量收敛前就位）
+        // v3 容器加载（内部含 v1/v2 旧布局迁移与归一化）；
+        // 每组容量覆盖独立成 key，仍在条目按容量收敛前就位
         if let data = UserDefaults.standard.data(forKey: Self.drawerLimitsKey),
            let saved = try? JSONDecoder().decode([String: Int].self, from: data) {
             drawerLimitOverrides = Dictionary(uniqueKeysWithValues: saved.compactMap { key, value in
@@ -185,9 +167,16 @@ final class ShelfStore: ObservableObject {
             })
         }
 
-        if let data = UserDefaults.standard.data(forKey: Self.defaultsKey),
-           let saved = try? JSONDecoder().decode([ShelfItem].self, from: data) {
-            var restored = saved
+        let schema = ShelfPersistence.load(defaults: .standard)
+        drawers = schema?.drawers ?? [DrawerGroup(name: Self.defaultDrawerName)]
+        if let schema, drawers.contains(where: { $0.id == schema.currentDrawerID }) {
+            currentDrawerID = schema.currentDrawerID
+        } else {
+            currentDrawerID = drawers[0].id
+        }
+
+        if let schema {
+            var restored = schema.items
             let settings = AppSettings.shared
             // 默认只保留仍然存在的文件；可在设置里关闭（保留失效条目，等手动移除）
             if settings.removeMissingOnLaunch {
@@ -198,15 +187,11 @@ final class ShelfStore: ObservableObject {
             restored = Self.trimmedPerDrawer(restored) { drawerID in
                 loadedLimits[drawerID] ?? settings.maxItems
             }
-            // 旧版本条目没有 drawerID：归入第一个分组（通常是迁移出的「默认」）
-            let fallbackDrawer = drawers[0].id
-            var migratedCount = 0
-            for index in restored.indices where restored[index].drawerID == nil {
-                restored[index].drawerID = fallbackDrawer
-                migratedCount += 1
-            }
-            if migratedCount > 0 {
-                DiagnosticsLog.shared.log("store", "legacy items migrated count=\(migratedCount)")
+            if schema.version == ShelfPersistence.currentVersion,
+               UserDefaults.standard.data(forKey: ShelfPersistence.storeKey) == nil,
+               !restored.isEmpty {
+                // 从旧布局迁移而来（v3 key 尚未写过）：记录一次，随后 flushPersist 落 v3
+                DiagnosticsLog.shared.log("store", "legacy store migrated items=\(restored.count) drawers=\(drawers.count)")
             }
             items = restored
         }
@@ -450,12 +435,9 @@ final class ShelfStore: ObservableObject {
 
     // MARK: 分组（多抽屉）
 
-    /// 分组结构 + 当前分组持久化
+    /// 分组结构 + 当前分组持久化（与条目合并进 v3 容器，单一数据源）
     private func persistDrawers() {
-        if let data = try? JSONEncoder().encode(drawers) {
-            UserDefaults.standard.set(data, forKey: Self.drawersKey)
-        }
-        UserDefaults.standard.set(currentDrawerID.uuidString, forKey: Self.currentDrawerKey)
+        persistSchema()
     }
 
     /// 条目按归一化规则解析所属分组：nil（异常/未迁移）视为第一个分组
@@ -925,6 +907,19 @@ final class ShelfStore: ObservableObject {
     /// 落盘防抖任务（高频变化——拖拽重排 / 置顶切换 / 批量操作——合并成一次编码）
     private var persistTask: Task<Void, Never>?
 
+    /// v3 容器快照（items + drawers + 当前分组，一次编码单 key 原子写）
+    private func persistSchema() {
+        ShelfPersistence.save(
+            ShelfPersistence.Schema(
+                version: ShelfPersistence.currentVersion,
+                items: items,
+                drawers: drawers,
+                currentDrawerID: currentDrawerID
+            ),
+            to: .standard
+        )
+    }
+
     /// 防抖落盘：150ms 内的连续变化合并成一次全量编码（items didSet 高频触发）。
     /// 立即落盘走 flushPersist（退出 / 测试 / 迁移后）。
     func persist() {
@@ -932,9 +927,7 @@ final class ShelfStore: ObservableObject {
         persistTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: 150_000_000)
             guard !Task.isCancelled, let self else { return }
-            let snapshot = self.items
-            guard let data = try? JSONEncoder().encode(snapshot) else { return }
-            UserDefaults.standard.set(data, forKey: Self.defaultsKey)
+            self.persistSchema()
         }
     }
 
@@ -942,9 +935,7 @@ final class ShelfStore: ObservableObject {
     func flushPersist() {
         persistTask?.cancel()
         persistTask = nil
-        if let data = try? JSONEncoder().encode(items) {
-            UserDefaults.standard.set(data, forKey: Self.defaultsKey)
-        }
+        persistSchema()
     }
 
     nonisolated static func sizeText(for path: String) -> String {

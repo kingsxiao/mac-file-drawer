@@ -97,7 +97,7 @@ final class PerformanceBaselineTests: XCTestCase {
         MainActor.assumeIsolated {
             let store = ShelfStore.shared
             let original = store.items
-            let originalData = UserDefaults.standard.data(forKey: "com.wangxiao.filedrawer.items")
+            let originalData = UserDefaults.standard.data(forKey: ShelfPersistence.storeKey)
 
             let probe = [ShelfItem(url: URL(fileURLWithPath: "/tmp/防抖探针-\(UUID().uuidString).txt"))]
             store.items = probe // didSet → 防抖
@@ -105,15 +105,15 @@ final class PerformanceBaselineTests: XCTestCase {
                 store.items = original
                 store.flushPersist()
                 if let originalData {
-                    UserDefaults.standard.set(originalData, forKey: "com.wangxiao.filedrawer.items")
+                    UserDefaults.standard.set(originalData, forKey: ShelfPersistence.storeKey)
                 }
             }
 
             store.flushPersist() // 立即落盘
-            let saved = UserDefaults.standard.data(forKey: "com.wangxiao.filedrawer.items")
+            let saved = UserDefaults.standard.data(forKey: ShelfPersistence.storeKey)
             XCTAssertNotNil(saved)
-            let decoded = try? JSONDecoder().decode([ShelfItem].self, from: saved ?? Data())
-            XCTAssertEqual(decoded?.first?.name, probe[0].name, "flush 后 UserDefaults 应立即可读")
+            let decoded = try? JSONDecoder().decode(ShelfPersistence.Schema.self, from: saved ?? Data())
+            XCTAssertEqual(decoded?.items.first?.name, probe[0].name, "flush 后 v3 容器应立即可读")
         }
     }
 }
