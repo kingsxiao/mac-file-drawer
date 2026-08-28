@@ -125,7 +125,7 @@ enum DrawerCommands {
         let candidates = store.items(in: drawerID).sorted { $0.addedAt > $1.addedAt }
         let targets = limit > 0 ? Array(candidates.prefix(limit)) : Array(candidates)
         guard !targets.isEmpty else { return 0 }
-        InteractionModel.shared.setSortMode(.manual, for: drawerID)
+        InteractionModel.shared.switchToManualPreservingDisplay(store: store, drawerID: drawerID)
         store.send(ids: targets.map(\.id), toFront: true)
         DiagnosticsLog.shared.log("auto", "send-to-front group=\(group ?? "-") limit=\(limit) count=\(targets.count)")
         return targets.count

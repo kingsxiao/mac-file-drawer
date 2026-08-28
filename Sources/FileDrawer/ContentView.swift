@@ -386,14 +386,18 @@ private struct RowReorderDropDelegate: DropDelegate {
     let store: ShelfStore
     let interaction: InteractionModel
 
-    /// 只接收带内部排序标记的拖拽；外部文件拖拽没有该类型，自然落到抽屉级接收器
+    /// 只接收本应用的排序拖拽。判别依据 = 会话记录（onDrag 开始时同步写入），
+    /// 不再检查 / 解码拖拽 provider：真实会话里落点端 provider 由拖拽 pasteboard
+    /// 重建，.ownProcess 自定义标记不一定存活（标记丢失 = 行级代理恒拒收 = 拖拽
+    /// 排序整个失效），同步 loadDataRepresentation 还会阻塞主线程等异步回调——
+    /// validateDrop 每次悬停更新都调用，等于拖动期间持续卡 UI
     func validateDrop(info: DropInfo) -> Bool {
-        guard let provider = info.itemProviders(for: [.data]).first(where: { ReorderDrag.isReorderProvider($0) }) else { return false }
-        return ReorderDrag.itemID(from: provider) != nil
+        interaction.reorderDraggedID != nil
     }
 
     func dropEntered(info: DropInfo) {
         interaction.reorderTargetID = rowID
+        updateInsertSlot()
     }
 
     func dropUpdated(info: DropInfo) -> DropProposal? {
@@ -401,27 +405,50 @@ private struct RowReorderDropDelegate: DropDelegate {
     }
 
     func dropExited(info: DropInfo) {
-        if interaction.reorderTargetID == rowID { interaction.reorderTargetID = nil }
+        if interaction.reorderTargetID == rowID {
+            interaction.reorderTargetID = nil
+            interaction.reorderInsertAfter = false
+        }
+    }
+
+    /// 方向感知落点：源行在目标上方（向下拖）→ 插目标后（指示条画下缘）；
+    /// 下方（向上拖）→ 插目标前。固定插前会让「向下拖一格」插回原位 = 无操作。
+    private func updateInsertSlot() {
+        guard let draggedID = interaction.reorderDraggedID else { return }
+        let sort = interaction.sortMode(for: store.currentDrawerID)
+        let displayed = interaction.displayItems(from: store.currentItems, sort: sort)
+        interaction.reorderInsertAfter =
+            InteractionModel.reorderInsertsAfter(draggedID: draggedID, targetID: rowID, in: displayed) ?? false
     }
 
     func performDrop(info: DropInfo) -> Bool {
         interaction.reorderTargetID = nil
-        guard let provider = info.itemProviders(for: [.data]).first(where: { ReorderDrag.isReorderProvider($0) }),
-              let draggedID = ReorderDrag.itemID(from: provider),
-              draggedID != rowID else { return true }
-
-        // 拖拽行在多选集合里 → 整批一起移动（访达语义）
-        var movingIDs = [draggedID]
-        if interaction.selectedIDs.contains(draggedID), interaction.selectedIDs.count > 1 {
-            let sort = interaction.sortMode(for: store.currentDrawerID)
-            let displayed = interaction.displayItems(from: store.currentItems, sort: sort)
-            movingIDs = displayed.filter { interaction.selectedIDs.contains($0.id) }.map(\.id)
+        guard let draggedID = interaction.reorderDraggedID else {
+            interaction.reorderInsertAfter = false
+            return true
+        }
+        interaction.reorderLandedOnRow = true
+        guard draggedID != rowID else {
+            interaction.reorderInsertAfter = false
+            return true
         }
 
+        // 拖拽行在多选集合里 → 整批一起移动（访达语义）
+        let sort = interaction.sortMode(for: store.currentDrawerID)
+        let displayed = interaction.displayItems(from: store.currentItems, sort: sort)
+        var movingIDs = [draggedID]
+        if interaction.selectedIDs.contains(draggedID), interaction.selectedIDs.count > 1 {
+            movingIDs = displayed.filter { interaction.selectedIDs.contains($0.id) }.map(\.id)
+        }
+        // 落点方位在松手瞬间重估（dropEntered 记录过，这里兜底同一判定）
+        let insertAfter = InteractionModel.reorderInsertsAfter(
+            draggedID: draggedID, targetID: rowID, in: displayed
+        ) ?? interaction.reorderInsertAfter
+        interaction.reorderInsertAfter = false
+
         withAnimation(DrawerMotion.smooth) {
-            let sort = interaction.sortMode(for: store.currentDrawerID)
-            if sort != .manual { interaction.setSortMode(.manual, for: store.currentDrawerID) }
-            store.move(ids: movingIDs, before: rowID)
+            interaction.switchToManualPreservingDisplay(store: store, drawerID: store.currentDrawerID)
+            store.move(ids: movingIDs, before: rowID, after: insertAfter)
         }
         return true
     }
@@ -435,8 +462,11 @@ private struct DrawerDropDelegate: DropDelegate {
     @Binding var isTargeted: Bool
 
     /// 内部排序拖拽落到行外（列表空隙 / 头部）= 取消，不当外部文件「放入」；
-    /// 真正的外部文件拖拽没有内部标记，照常接收
+    /// 真正的外部文件拖拽照常接收。判别先看会话记录（onDrag 开始时同步写入），
+    /// provider 标记只作旁证——真实会话里 .ownProcess 标记不一定存活，
+    /// 只靠它会让排序拖拽落到行外时被误收成「放入文件」（条目重复入抽屉）
     func validateDrop(info: DropInfo) -> Bool {
+        guard interaction.reorderDraggedID == nil else { return false }
         let files = info.itemProviders(for: DropFileLoader.typeIdentifiers)
         guard !files.isEmpty else { return false }
         return !files.contains { ReorderDrag.isReorderProvider($0) }
@@ -742,8 +772,10 @@ private struct ItemRow: View {
                 )
                 .allowsHitTesting(false)
         )
-        // 行内排序插入指示条：拖拽悬停到本行上方时亮起
-        .overlay(alignment: .top) {
+        // 行内排序插入指示条：拖拽悬停到本行上时亮起。方位随拖拽方向——
+        // 向下拖插到本行后（画下缘），向上拖插到本行前（画上缘），
+        // 指示条即最终落点，不会出现「亮在上缘、落点却在下方一格」的误导
+        .overlay(alignment: interaction.reorderInsertAfter ? .bottom : .top) {
             if interaction.reorderTargetID == item.id {
                 Capsule()
                     .fill(DrawerTheme.accentGradient)
@@ -785,6 +817,7 @@ private struct ItemRow: View {
                 .animation(DrawerMotion.iconHover, value: hovered)
                 .onDrag {
                     let provider = item.dragProvider()
+                    interaction.beginReorderSession(dragging: item.id)
                     ReorderDrag.register(provider, id: item.id)
                     return provider
                 }
@@ -815,11 +848,11 @@ private struct ItemRow: View {
                     lineWidth: 1
                 )
         )
-        // 悬停浮起：柔和投影制造"离开列表平面"的层次
+        // 悬停浮起：柔和投影制造"离开列表平面"的层次；紧凑行卡片更小，投影同步收敛
         .shadow(
             color: .black.opacity(hovered ? 0.10 : 0),
-            radius: hovered ? 8 : 0,
-            y: hovered ? 3 : 0
+            radius: hovered ? (settings.compactRows ? 6.5 : 8) : 0,
+            y: hovered ? (settings.compactRows ? 2.5 : 3) : 0
         )
         // 入场：从贴边侧滑入淡入；新拖入的条目交给列表 insertion transition
         .opacity(entered ? (isMissing ? 0.55 : 1) : 0)
@@ -873,10 +906,18 @@ private struct ItemRow: View {
         .contextMenu { rowContextMenu }
         .onDrag {
             let provider = item.dragProvider()
+            // 行体拖拽与把手拖拽开同一种排序会话：悬停其他行即出现排序指示、
+            // 松手排序；拖到抽屉外仍是文件拷贝（外部目标端忽略自定义类型）。
+            // 两处都开是刻意的：SwiftUI 嵌套 onDrag 的命中归属不可靠，
+            // 无论哪处闭包被触发都能开出可排序的会话
+            interaction.beginReorderSession(dragging: item.id)
+            ReorderDrag.register(provider, id: item.id)
             if settings.collapseAfterDragOut {
                 DragSessionObserver.notifyDragEnd {
                     guard settings.collapseAfterDragOut,
-                          !InteractionModel.shared.isCollapsed else { return }
+                          !InteractionModel.shared.isCollapsed,
+                          // 松手落在行上 = 排序，不是拖出 → 不收起
+                          !InteractionModel.shared.reorderLandedOnRow else { return }
                     NotificationCenter.default.post(name: .toggleDrawer, object: nil)
                 }
             }
@@ -920,22 +961,28 @@ private struct ItemRow: View {
 
     private var tileSize: CGFloat { settings.compactRows ? 32 : 42 }
 
+    /// 名称字号：紧凑档随瓷片收敛一档（13→12.5），文字栏不再与 32pt 瓷片等高争位，
+    /// 让瓷片重新成为行的视觉主导；标准档维持 13（469e63a 定稿的可读性）
+    private var nameFontSize: CGFloat { settings.compactRows ? 12.5 : 13 }
+
     /// 行卡片圆角：随密度模式缩放，与更宽敞的行内边距配套
     private var rowRadius: CGFloat { settings.compactRows ? 11 : 13 }
 
     /// 瓷片 + 置顶角标 + 多选拖拽把手层
     private var tileWithOverlays: some View {
-        FileTile(item: item, store: store, size: tileSize)
+        FileTile(item: item, thumbs: store.thumbs, size: tileSize)
             .overlay(alignment: .topLeading) {
                 if item.pinned {
-                    // 置顶角标：品牌色小图钉，压在瓷片左上角
+                    // 置顶角标：品牌色小图钉，压在瓷片左上角。
+                    // 三项尺寸随瓷片等比（42pt 为基准），32pt 紧凑瓷片上不再盖住近半张缩略图
+                    let k = tileSize / 42
                     Image(systemName: "pin.fill")
-                        .font(.system(size: 7, weight: .bold))
+                        .font(.system(size: 7 * k, weight: .bold))
                         .foregroundStyle(.white)
-                        .padding(3)
+                        .padding(3 * k)
                         .background(Circle().fill(DrawerTheme.accentGradient))
                         .overlay(Circle().strokeBorder(.white.opacity(0.45), lineWidth: 0.6))
-                        .offset(x: -3, y: -3)
+                        .offset(x: -3 * k, y: -3 * k)
                         .help(L10n.t("已置顶 · 免于自动清理"))
                 }
             }
@@ -1007,7 +1054,7 @@ private struct ItemRow: View {
     private var metaRow: some View {
         if isMissing || !metaLine.isEmpty || isContentMatch {
             Text(displayMeta)
-                .font(.system(size: settings.compactRows ? 10.5 : 11.5))
+                .font(.system(size: settings.compactRows ? 10 : 11.5))
                 .foregroundStyle(isMissing
                                  ? AnyShapeStyle(DrawerTheme.danger.opacity(0.8))
                                  : AnyShapeStyle(.secondary))
@@ -1101,12 +1148,10 @@ private struct ItemRow: View {
         }
     }
 
-    /// 手动调整顺序：首次使用自动切换到「手动顺序」排序
+    /// 手动调整顺序：首次使用自动切换到「手动顺序」排序（冻结屏幕所见为基准）
     private func reorderTargets(_ targets: [ShelfItem], nudge: Int? = nil, sendToFront: Bool? = nil) {
         withAnimation(DrawerMotion.smooth) {
-            if interaction.sortMode(for: store.currentDrawerID) != .manual {
-                interaction.setSortMode(.manual, for: store.currentDrawerID)
-            }
+            interaction.switchToManualPreservingDisplay(store: store, drawerID: store.currentDrawerID)
             if let nudge {
                 store.nudge(ids: targets.map(\.id), by: nudge)
             } else if let sendToFront {
@@ -1216,32 +1261,15 @@ private struct ItemRow: View {
 
         if keywords.isEmpty {
             Text(item.name)
-                .font(.system(size: 13, weight: .semibold))
+                .font(.system(size: nameFontSize, weight: .semibold))
                 .lineLimit(1)
                 .truncationMode(.middle)
         } else {
-            Text(Self.highlighted(item.name, keywords: keywords))
-                .font(.system(size: 13, weight: .semibold))
+            Text(SearchNameHighlight.attributed(item.name, keywords: keywords, fontSize: nameFontSize))
+                .font(.system(size: nameFontSize, weight: .semibold))
                 .lineLimit(1)
                 .truncationMode(.middle)
         }
-    }
-
-    private static func highlighted(_ text: String, keywords: [String]) -> AttributedString {
-        var attributed = AttributedString(text)
-        let lowerText = text.lowercased()
-        for keyword in keywords {
-            let lowerQuery = keyword.lowercased()
-            var searchStart = lowerText.startIndex
-            while let range = lowerText.range(of: lowerQuery, range: searchStart..<lowerText.endIndex) {
-                if let attr = Range(range, in: attributed) {
-                    attributed[attr].foregroundColor = DrawerTheme.accent
-                    attributed[attr].font = .system(size: 13, weight: .bold)
-                }
-                searchStart = range.upperBound
-            }
-        }
-        return attributed
     }
 
     private func rowAction(
@@ -1440,7 +1468,7 @@ private struct CollapsedTabView: View {
                 let hoverLift: CGFloat = hovered && index == 0 ? 2 : 0
                 Group {
                     if index == 0 {
-                        FileTile(item: item, store: store, size: Self.tileSize)
+                        FileTile(item: item, thumbs: store.thumbs, size: Self.tileSize)
                     } else {
                         paperCard
                     }
@@ -1518,4 +1546,30 @@ private struct CollapsedTabView: View {
 }
 
 // MARK: - 搜索栏
+
+/// 搜索命中高亮：给名称里的命中片段上品牌色 + 加粗。
+/// run 级属性必须走 AppKit scope（NSColor / NSFont）：SwiftUI scope 的 Color·Font
+/// run 属性在实机 Text 渲染路径会被整体丢弃（高亮从未显示过），只有离屏
+/// ImageRenderer 渲染得出——排查记录见 DrawerTheme.accentNSColor
+enum SearchNameHighlight {
+    /// 共享单例：相邻命中段的 run 属性值相等才能合并成一个 run
+    private static let accent = DrawerTheme.accentNSColor
+
+    static func attributed(_ text: String, keywords: [String], fontSize: CGFloat) -> AttributedString {
+        var attributed = AttributedString(text)
+        let lowerText = text.lowercased()
+        for keyword in keywords {
+            let lowerQuery = keyword.lowercased()
+            var searchStart = lowerText.startIndex
+            while let range = lowerText.range(of: lowerQuery, range: searchStart..<lowerText.endIndex) {
+                if let attr = Range(range, in: attributed) {
+                    attributed[attr].appKit.foregroundColor = accent
+                    attributed[attr].appKit.font = .boldSystemFont(ofSize: fontSize)
+                }
+                searchStart = range.upperBound
+            }
+        }
+        return attributed
+    }
+}
 

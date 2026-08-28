@@ -101,6 +101,19 @@ final class InteractionModel: ObservableObject {
         drawerSortOverrides.removeValue(forKey: drawerID)
     }
 
+    /// 手动调序（拖拽落点 / 菜单 / 键盘平移）的统一前置：非 manual 排序下先冻结
+    /// 屏幕所见顺序为存储顺序，再切「手动顺序」。否则调序以存储顺序为基准计算
+    /// 落点，切过去后整表跳序、落点与所见对不上（见 ShelfStore.adoptDisplayOrder）。
+    func switchToManualPreservingDisplay(store: ShelfStore, drawerID: UUID) {
+        let mode = sortMode(for: drawerID)
+        guard mode != .manual else { return }
+        store.adoptDisplayOrder(
+            displayItems(from: store.items(in: drawerID), sort: mode),
+            for: drawerID
+        )
+        setSortMode(.manual, for: drawerID)
+    }
+
     private func persistDrawerSortOverrides() {
         let raw = Dictionary(uniqueKeysWithValues: drawerSortOverrides.map { ($0.key.uuidString, $0.value.rawValue) })
         if let data = try? JSONEncoder().encode(raw) {
@@ -135,6 +148,63 @@ final class InteractionModel: ObservableObject {
     @Published var searchFocusToken = 0
     /// 行内拖拽排序：当前悬停的目标行（插入指示条），无拖拽时为 nil
     @Published var reorderTargetID: UUID?
+    /// 行内拖拽排序的落点方位：true = 插到目标行后（下缘指示条），false = 目标行前。
+    /// 按拖拽方向感知：源行在目标上方（向下拖）插目标后，下方（向上拖）插目标前。
+    /// 固定「插目标前」会让向下拖一格永远无操作（插回原位）——落点比预期高一行。
+    @Published var reorderInsertAfter = false
+
+    /// 拖拽方向 → 落点方位：基于当前展示顺序（拖拽会话期间列表不变）。
+    /// 返回 nil = 源或目标不在展示列表里（搜索过滤边缘态），调用方回退「插前」。
+    nonisolated static func reorderInsertsAfter(draggedID: UUID, targetID: UUID, in displayed: [ShelfItem]) -> Bool? {
+        guard let draggedIndex = displayed.firstIndex(where: { $0.id == draggedID }),
+              let targetIndex = displayed.firstIndex(where: { $0.id == targetID }),
+              draggedIndex != targetIndex else { return nil }
+        return draggedIndex < targetIndex
+    }
+
+    // MARK: 行内拖拽排序的会话记录
+
+    /// 本次排序拖拽拖动的条目 id。落点代理只读这份记录，不从拖拽 provider 解码：
+    /// 真实拖拽会话里落点端 provider 由拖拽 pasteboard 重建，.ownProcess 自定义
+    /// 标记/数据不一定存活（判别失败 = 拖拽排序整个失效），同步 loadDataRepresentation
+    /// 还要阻塞主线程等异步回调（validateDrop 每次悬停更新都调用 = 持续卡 UI）。
+    /// onDrag 闭包在会话开始的主线程同步执行，此处记录是确定性的。
+    private(set) var reorderDraggedID: UUID?
+    /// 会话号：防迟到的清理任务误清新会话（连续快速拖拽时上一次的
+    /// DragSessionObserver 轮询可能还没跑完）
+    private var reorderSessionToken = 0
+    /// 本次拖拽松手是否落在行上（= 排序成功，不是「拖出」）：抑制「拖出后自动收起」
+    var reorderLandedOnRow = false
+
+    /// onDrag 闭包（拖拽会话开始，主线程同步）调用：记录拖动条目并注册会话结束清理。
+    /// 拖拽取消时 SwiftUI 不保证回调 dropExited / 不会调 performDrop——指示条可能
+    /// 残留、会话记录可能变脏（脏记录会让下一次外部拖入被行级代理误判成排序拖拽），
+    /// 统一靠 DragSessionObserver 的会话结束轮询清理；token 不匹配则跳过。
+    /// 返回本次会话号（测试 / 调试驱动会话收尾用）。
+    @discardableResult
+    func beginReorderSession(dragging id: UUID) -> Int {
+        reorderSessionToken += 1
+        let token = reorderSessionToken
+        reorderDraggedID = id
+        reorderLandedOnRow = false
+        DragSessionObserver.notifyDragEnd { [weak self] in
+            self?.endReorderSession(token: token)
+        }
+        return token
+    }
+
+    /// 拖拽会话结束（落下 / 取消）后清理会话记录与指示条状态。
+    /// token 不匹配（清理迟到、会话已被新拖拽接替）则不动任何状态。
+    func endReorderSession(token: Int) {
+        guard token == reorderSessionToken else { return }
+        reorderSessionToken += 1
+        reorderDraggedID = nil
+        reorderLandedOnRow = false
+        if reorderTargetID != nil {
+            reorderTargetID = nil
+            reorderInsertAfter = false
+        }
+    }
 
     /// 测试可直接构造独立实例；应用代码使用 shared
     init() {

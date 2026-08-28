@@ -6,8 +6,18 @@ import SwiftUI
 // 品牌色按明暗外观自适应：深色模式整体提亮一档，保证在毛玻璃上的可读性。
 
 enum DrawerTheme {
+    /// 品牌强调色十六进制值（明 / 暗）：Color 与 NSColor 原体共用一套定义
+    private static let accentLightHex: UInt32 = 0x6C5CE7
+    private static let accentDarkHex: UInt32 = 0x8F7FF2
+
     /// 品牌强调色：靛紫（深色模式提亮）
-    static let accent = adaptive(light: 0x6C5CE7, dark: 0x8F7FF2)
+    static let accent = adaptive(light: accentLightHex, dark: accentDarkHex)
+    /// 强调色的 NSColor 原体。AttributedString 的 run 级前景色必须走 AppKit scope：
+    /// SwiftUI scope 的 Color run 属性在实机 Text 渲染路径会被整体丢弃
+    /// （离屏 ImageRenderer 却正常渲染，离线核验发现不了）——搜索高亮用之
+    static var accentNSColor: NSColor {
+        adaptiveNSColor(light: accentLightHex, dark: accentDarkHex)
+    }
     /// 渐变端色：紫罗兰，用于指示条 / 徽章 / 图标底（深色模式提亮）
     static let accentAlt = adaptive(light: 0xA05CE6, dark: 0xB692F2)
 

@@ -46,8 +46,13 @@ final class KeyboardRouter {
         // 包括 case 123/124 的预览切换分支也依赖此守卫不会被触达
         if panel.firstResponder is NSTextView { return event }
 
-        // 键盘操作的作用域 = 当前分组的展示条目
-        let displayed = model.displayItems(from: store.currentItems, sort: model.sortMode(for: store.currentDrawerID))
+        // 键盘操作的作用域 = 当前分组的展示条目。
+        // 惰性计算：绝大多数按键（⌘ 快捷键字母、放行给系统的键）用不到它，
+        // 没必要每次 keyDown 都跑一遍过滤 + 排序管线
+        lazy var displayed = model.displayItems(
+            from: store.currentItems,
+            sort: model.sortMode(for: store.currentDrawerID)
+        )
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
 
         // Cmd+F 聚焦/显示搜索框
@@ -101,9 +106,7 @@ final class KeyboardRouter {
             let targets = model.selectedItems(in: displayed)
             guard !targets.isEmpty else { return event }
             withAnimation(DrawerMotion.smooth) {
-                if model.sortMode(for: store.currentDrawerID) != .manual {
-                    model.setSortMode(.manual, for: store.currentDrawerID)
-                }
+                model.switchToManualPreservingDisplay(store: store, drawerID: store.currentDrawerID)
                 store.nudge(ids: targets.map(\.id), by: event.keyCode == 126 ? -1 : 1)
             }
             return nil
@@ -450,6 +453,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         HotKeyCenter.shared.update(settings.hotKeyEnabled ? settings.hotKeyBinding : nil) { [weak self] in
             self?.toggleCollapseOrExpand()
         }
+        updateScreenFocusTimer()
         repositionPanel()
     }
 
@@ -511,8 +515,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             )
         }
-        screenFocusTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.pollFocusedScreenIfNeeded() }
+        updateScreenFocusTimer()
+    }
+
+    /// 兜底轮询定时器按需启停：仅「跟随聚焦屏」模式需要（跟随鼠标屏模式的
+    /// 理由见 startScreenFocusFollowing 注释），设置切换时由 applySettings 重估。
+    /// 常驻空转的代价是每秒一次 Task 分配 + 主线程执行跳跃，后台常驻应用能省则省。
+    private func updateScreenFocusTimer() {
+        if settings.followMouseScreen {
+            screenFocusTimer?.invalidate()
+            screenFocusTimer = nil
+        } else if screenFocusTimer == nil {
+            screenFocusTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+                Task { @MainActor in self?.pollFocusedScreenIfNeeded() }
+            }
         }
     }
 

@@ -330,7 +330,7 @@ struct PreviewOverlayView: View {
 
     private var header: some View {
         HStack(spacing: 7) {
-            FileTile(item: item, store: store, size: 20)
+            FileTile(item: item, thumbs: store.thumbs, size: 20)
 
             Text(item.name)
                 .font(.system(size: 11, weight: .semibold))
@@ -408,7 +408,8 @@ struct QLPreviewRepresentable: NSViewRepresentable {
 
 struct FileTile: View {
     let item: ShelfItem
-    let store: ShelfStore
+    /// 观察独立的缩略图缓存：图落地只刷新瓷片自身，不牵动整个列表重渲染
+    @ObservedObject var thumbs: ThumbCache
     var size: CGFloat
     @ObservedObject private var settings = AppSettings.shared
     @Environment(\.colorScheme) private var colorScheme
@@ -421,7 +422,7 @@ struct FileTile: View {
         let radius = size * 0.27
 
         Group {
-            if settings.showThumbnails, let thumb = store.thumbs[item.id] {
+            if settings.showThumbnails, let thumb = thumbs[item.id] {
                 thumbnailTile(thumb, radius: radius)
             } else {
                 glyphTile(radius: radius)
@@ -432,9 +433,14 @@ struct FileTile: View {
 
     private func thumbnailTile(_ image: NSImage, radius: CGFloat) -> some View {
         ZStack(alignment: .bottomTrailing) {
+            // 方形约束必须放在 scaledToFill 之后、clipShape 之前：
+            // fill 的溢出绘制会把外层 ZStack 的边界撑大成「原始宽高比矩形」，
+            // clipShape 裁的就是这个被撑大的边界，行外的 frame(42×42) 只摆放不裁剪——
+            // 结果缩略图随图片比例忽宽忽窄（竖图窄条、横图宽条），左列参差不齐。
             Image(nsImage: image)
                 .resizable()
                 .scaledToFill()
+                .frame(width: size, height: size)
 
             if item.kind.variant == .video {
                 Image(systemName: "play.fill")
@@ -473,8 +479,10 @@ struct FileTile: View {
     private func glyphTile(radius: CGFloat) -> some View {
         let style = item.kind.style
         let dark = colorScheme == .dark
-        // 小尺寸（预览弹层头部 20pt）放不下角标，只在行内 30/38pt 瓷片上显示
-        let badge = size >= 30 ? style.badge : nil
+        // 扩展名角标只在 42pt 行内瓷片上显示：32pt 紧凑档上 6pt 字号的角标
+        // 糊成一团噪点（信息也在旁边文件名里），改用无角标的大符号（0.46 档）
+        // 更干净；预览弹层头部 20pt、收起边条 24pt 本来就放不下
+        let badge = size >= 34 ? style.badge : nil
         let iconSize = size * (badge == nil ? 0.46 : 0.37)
 
         return ZStack {

@@ -6,8 +6,13 @@ import UniformTypeIdentifiers
 //
 // 排序拖拽与「拖出文件」「外部拖入」共用同一条目 provider（同一个把手拖到抽屉外
 // 依然能拷贝文件）。靠一个仅本进程可见的自定义 UTType 标记「这是抽屉内部的
-// 排序拖拽」：行级 onDrop 只对该类型生效，外部拖拽（无此类型）自然落到
-// 抽屉级的「放入文件」接收器上，互不干扰。
+// 排序拖拽」：外部拖拽（无此类型）落到抽屉级的「放入文件」接收器上，互不干扰。
+//
+// 注意：标记只作落点端判别的旁证。真实拖拽会话里落点端拿到的 provider 由拖拽
+// pasteboard 重建，.ownProcess 注册的标记/数据不一定存活——拖动的条目 id 由
+// InteractionModel.beginReorderSession 在 onDrag 开始时同步记录（见会话记录），
+// 落点代理一律读会话记录，不从 provider 解码（同步 loadDataRepresentation 会
+// 阻塞主线程等异步回调，validateDrop 每次悬停更新都调用 = 持续卡 UI）。
 
 enum ReorderDrag {
     static let typeIdentifier = "com.wangxiao.filedrawer.reorder"
@@ -35,19 +40,5 @@ enum ReorderDrag {
     /// 外部拖拽（访达/浏览器等）不可能有。
     static func isReorderProvider(_ provider: NSItemProvider) -> Bool {
         provider.registeredTypeIdentifiers.contains(typeIdentifier)
-    }
-
-    /// 从 provider 同步取出条目 id（内部拖拽的 provider 即时回调，不会久等）
-    static func itemID(from provider: NSItemProvider) -> UUID? {
-        var result: UUID?
-        let semaphore = DispatchSemaphore(value: 0)
-        _ = provider.loadDataRepresentation(forTypeIdentifier: typeIdentifier) { data, _ in
-            if let data, let raw = String(data: data, encoding: .utf8) {
-                result = UUID(uuidString: raw)
-            }
-            semaphore.signal()
-        }
-        _ = semaphore.wait(timeout: .now() + 1)
-        return result
     }
 }

@@ -94,6 +94,21 @@ struct DrawerGroup: Identifiable, Codable, Equatable {
     }
 }
 
+// MARK: - 缩略图缓存对象
+
+/// ShelfStore 的缩略图存储：单独成 ObservableObject，缩略图落地只失效观察它的
+/// FileTile（小视图），不牵动 ContentView 与整个行列表的重渲染。
+/// 下标转发保持既有 `store.thumbs[id]` 读写形态（业务代码与测试零改动）。
+@MainActor
+final class ThumbCache: ObservableObject {
+    @Published var images: [UUID: NSImage] = [:]
+
+    subscript(id: UUID) -> NSImage? {
+        get { images[id] }
+        set { images[id] = newValue }
+    }
+}
+
 // MARK: - Store
 
 @MainActor
@@ -123,8 +138,11 @@ final class ShelfStore: ObservableObject {
         didSet { persistSchema() }
     }
 
-    /// 缩略图缓存（图片/视频真实预览）
-    @Published var thumbs: [UUID: NSImage] = [:]
+    /// 缩略图缓存（图片/视频真实预览）。独立 ObservableObject 而非 @Published：
+    /// 每个后台解码完成都会更新它，若挂在 store 上会让 ContentView 连带整个列表
+    /// （含过滤 + 排序管线与全部行视图）重渲染一次——首屏批量补图时逐张触发，
+    /// 是滚动卡顿来源。拆开后只有观察它的 FileTile（小视图）失效。
+    let thumbs = ThumbCache()
     private var thumbFailed = Set<UUID>()
     /// 正在后台解码的条目：行反复 onAppear（滚动/搜索过滤）时
     /// 避免对同一个大文件并发排多个解码任务
@@ -138,6 +156,8 @@ final class ShelfStore: ObservableObject {
     private var missingScanInFlight = false
     /// 扫描进行中又有新请求：扫描完成后自动再扫一轮（合并而不是丢弃）
     private var missingScanPending = false
+    /// 启动期「丢弃失效条目」是否已应用过（只在首次后台扫描后执行一次）
+    private var didApplyLaunchMissingPrune = false
     /// 设置里重新打开缩略图时，为已经显示过（错过 onAppear）的行补齐
     private var thumbnailSettingCancellable: AnyCancellable?
     /// 设置面板调整清理策略时立即生效（设置承诺「即时生效」）
@@ -174,10 +194,9 @@ final class ShelfStore: ObservableObject {
         if let schema {
             var restored = schema.items
             let settings = AppSettings.shared
-            // 默认只保留仍然存在的文件；可在设置里关闭（保留失效条目，等手动移除）
-            if settings.removeMissingOnLaunch {
-                restored = restored.filter { FileManager.default.fileExists(atPath: $0.path) }
-            }
+            // 「启动丢弃失效条目」不在主线程同步扫盘（fileExists × n 会把网络卷
+            // 上的条目变成启动卡顿）：改为首次后台存在性扫描落地后静默移除
+            // （见 applyMissingScan）。无失效条目时行为与同步过滤完全一致。
             restored = Self.pruned(restored, policy: settings.autoClean)
             let loadedLimits = drawerLimitOverrides
             restored = Self.trimmedPerDrawer(restored) { drawerID in
@@ -397,9 +416,28 @@ final class ShelfStore: ObservableObject {
         withAnimation(DrawerMotion.smooth) { items = next }
     }
 
-    /// 手动排序（拖拽把手）：把整批条目移到目标条目前方，保持批内相对顺序。
-    /// 跨置顶分区拖拽 = 整块对齐目标分区的置顶态（拖进置顶区即置顶，拖出即取消）。
-    func move(ids: [UUID], before targetID: UUID) {
+    /// 调序前的顺序冻结：非 manual 排序下展示顺序由排序管线决定，与 items 存储
+    /// 顺序无关（默认「最新在前」= 存储顺序整表倒置），而 move / nudge / send 都以
+    /// 存储顺序为基准计算落点——不冻结直接切 manual 会让整表跳到存储顺序、拖拽
+    /// 条目落点与屏幕所见完全对不上。把该分组条目在 items 中的相对顺序改写为
+    /// 当前展示顺序（其他分组条目原地不动），之后的移动与 manual 展示以此为准。
+    func adoptDisplayOrder(_ displayed: [ShelfItem], for drawerID: UUID) {
+        guard displayed.count > 1 else { return }
+        let displayedIDs = Set(displayed.map(\.id))
+        var pending = displayed
+        var next = items
+        for index in next.indices where displayedIDs.contains(next[index].id) {
+            next[index] = pending.removeFirst()
+        }
+        guard next != items else { return }
+        items = next
+    }
+
+    /// 手动排序（拖拽把手）：把整批条目移到目标条目的前方 / 后方，保持批内相对顺序。
+    /// after 按拖拽方向取：向下拖插目标后、向上拖插目标前（固定插前会让向下拖
+    /// 一格永远插回原位 = 无操作）。跨置顶分区拖拽 = 整块对齐目标分区的置顶态
+    /// （拖进置顶区即置顶，拖出即取消）。
+    func move(ids: [UUID], before targetID: UUID, after: Bool = false) {
         guard let targetIndex = items.firstIndex(where: { $0.id == targetID }) else { return }
         let targetPinned = items[targetIndex].pinned
         let set = Set(ids)
@@ -413,7 +451,7 @@ final class ShelfStore: ObservableObject {
         if movingItems.contains(where: { $0.pinned != targetPinned }) {
             for index in movingItems.indices { movingItems[index].pinned = targetPinned }
         }
-        rest.insert(contentsOf: movingItems, at: restTarget)
+        rest.insert(contentsOf: movingItems, at: after ? restTarget + 1 : restTarget)
         guard rest != items else { return }
         withAnimation(DrawerMotion.smooth) { items = rest }
     }
@@ -685,15 +723,28 @@ final class ShelfStore: ObservableObject {
     }
 
     /// 扫描结果落地：只保留仍在列表里的条目（扫描期间列表可能已变化）；
-    /// 有挂起请求时自动补扫一轮。
+    /// 有挂起请求时自动补扫一轮。首次扫描顺带执行「启动丢弃失效条目」。
     private func applyMissingScan(_ result: Set<UUID>) {
         missingScanInFlight = false
         let merged = result.intersection(Set(items.map(\.id)))
         if merged != missingIDs { missingIDs = merged }
+        applyLaunchMissingPruneIfNeeded(missing: merged)
         if missingScanPending {
             missingScanPending = false
             refreshMissingStatus()
         }
+    }
+
+    /// 「启动时丢弃已不存在的条目」（removeMissingOnLaunch）的落地：
+    /// 在首次后台存在性扫描完成后静默移除（不记撤销快照、不打 toast）。
+    /// 旧实现挂在 init 里同步 fileExists × n，条目指向网络卷时首帧可被卡住数秒。
+    private func applyLaunchMissingPruneIfNeeded(missing: Set<UUID>) {
+        guard !didApplyLaunchMissingPrune else { return }
+        didApplyLaunchMissingPrune = true
+        guard AppSettings.shared.removeMissingOnLaunch, !missing.isEmpty else { return }
+        let paths = Set(items.filter { missing.contains($0.id) }.map(\.path))
+        releaseAuxState(ids: missing, paths: paths)
+        items.removeAll { missing.contains($0.id) }
     }
 
     /// 清空当前分组的条目（菜单「清空」作用域 = 正在看的分组）
