@@ -8,13 +8,22 @@ on:
 
 jobs:
   test:
-    name: Build & Test (macOS 14)
-    runs-on: macos-14
+    name: Build & Test (macOS 26)
+    # macos-26 自带 Xcode 26.x——与作者本机工具链一致（macos-14 的旧 Swift 会把
+    # 同一份代码判出 ambiguous operator / MainActor 隔离错误，且已停止维护）
+    runs-on: macos-26
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+      - name: Select newest Xcode
+        run: |
+          set -e
+          APP="$(ls -d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -1)"
+          [[ -n "$APP" ]] || APP="/Applications/Xcode.app"
+          [[ -d "$APP" ]] || { echo "::error::找不到 Xcode：$(ls /Applications)"; exit 1; }
+          echo "使用 $APP"
+          sudo xcode-select -s "$APP/Contents/Developer"
+          xcodebuild -version
 
       - name: Build
         run: swift build
@@ -42,13 +51,13 @@ jobs:
         run: zsh ./make_dmg.sh --universal
 
       - name: Upload zip artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: FileDrawer-universal.zip
           path: build/FileDrawer.zip
 
       - name: Upload DMG artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: FileDrawer-universal.dmg
           path: build/*.dmg
@@ -57,13 +66,20 @@ jobs:
   # 脚本自带保护：FileDrawer 运行中拒绝、defaults 域非空拒绝、结束自清理。
   automation-smoke:
     name: Automation URL Smoke (manual)
-    runs-on: macos-14
+    runs-on: macos-26
     if: github.event_name == 'workflow_dispatch'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+      - name: Select newest Xcode
+        run: |
+          set -e
+          APP="$(ls -d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -1)"
+          [[ -n "$APP" ]] || APP="/Applications/Xcode.app"
+          [[ -d "$APP" ]] || { echo "::error::找不到 Xcode：$(ls /Applications)"; exit 1; }
+          echo "使用 $APP"
+          sudo xcode-select -s "$APP/Contents/Developer"
+          xcodebuild -version
 
       - name: Package .app
         run: zsh ./make_app.sh
