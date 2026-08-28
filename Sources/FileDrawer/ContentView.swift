@@ -388,7 +388,7 @@ private struct RowReorderDropDelegate: DropDelegate {
 
     /// 只接收带内部排序标记的拖拽；外部文件拖拽没有该类型，自然落到抽屉级接收器
     func validateDrop(info: DropInfo) -> Bool {
-        guard let provider = info.itemProviders(for: [ReorderDrag.type]).first else { return false }
+        guard let provider = info.itemProviders(for: [.data]).first(where: { ReorderDrag.isReorderProvider($0) }) else { return false }
         return ReorderDrag.itemID(from: provider) != nil
     }
 
@@ -406,7 +406,7 @@ private struct RowReorderDropDelegate: DropDelegate {
 
     func performDrop(info: DropInfo) -> Bool {
         interaction.reorderTargetID = nil
-        guard let provider = info.itemProviders(for: [ReorderDrag.type]).first,
+        guard let provider = info.itemProviders(for: [.data]).first(where: { ReorderDrag.isReorderProvider($0) }),
               let draggedID = ReorderDrag.itemID(from: provider),
               draggedID != rowID else { return true }
 
@@ -437,8 +437,9 @@ private struct DrawerDropDelegate: DropDelegate {
     /// 内部排序拖拽落到行外（列表空隙 / 头部）= 取消，不当外部文件「放入」；
     /// 真正的外部文件拖拽没有内部标记，照常接收
     func validateDrop(info: DropInfo) -> Bool {
-        guard info.itemProviders(for: [ReorderDrag.type]).isEmpty else { return false }
-        return !info.itemProviders(for: DropFileLoader.typeIdentifiers).isEmpty
+        let files = info.itemProviders(for: DropFileLoader.typeIdentifiers)
+        guard !files.isEmpty else { return false }
+        return !files.contains { ReorderDrag.isReorderProvider($0) }
     }
 
     func dropEntered(info: DropInfo) {

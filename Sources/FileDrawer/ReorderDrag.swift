@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 import UniformTypeIdentifiers
 
 // MARK: - 行内拖拽排序的载荷识别
@@ -24,6 +25,16 @@ enum ReorderDrag {
             completion(id.uuidString.data(using: .utf8), nil)
             return nil
         }
+    }
+
+    /// 同步判定拖拽 provider 是否携带内部排序标记。
+    /// 不要用 `itemProviders(for: [ReorderDrag.type])` 做内外判别：动态自定义
+    /// UTType 的符合性匹配在真实拖拽会话里会误命中外部文件 provider（实测
+    /// 访达拖入时该查询返回非空），导致抽屉把所有外部拖入都当成内部排序拒收。
+    /// 直接查 provider 注册的类型标识是确定性的：内部拖拽注册过该标识，
+    /// 外部拖拽（访达/浏览器等）不可能有。
+    static func isReorderProvider(_ provider: NSItemProvider) -> Bool {
+        provider.registeredTypeIdentifiers.contains(typeIdentifier)
     }
 
     /// 从 provider 同步取出条目 id（内部拖拽的 provider 即时回调，不会久等）

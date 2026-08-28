@@ -88,4 +88,24 @@ final class ReorderTests: XCTestCase {
         let plain = NSItemProvider()
         XCTAssertNil(ReorderDrag.itemID(from: plain))
     }
+
+    /// 内外拖拽判别必须用「注册类型标识包含」而不能用自定义 UTType 符合性匹配：
+    /// 实测真实拖拽会话里 `itemProviders(for: [ReorderDrag.type])` 会误命中外部
+    /// provider（访达拖入被当成内部排序拒收 → 拖入无任何反应的回归）。
+    /// registeredTypeIdentifiers 判别对内外两个方向都是确定性的。
+    func testReorderProviderDiscrimination() {
+        // 内部排序拖拽：注册过标记 → 判定为内部
+        let internalProvider = NSItemProvider()
+        ReorderDrag.register(internalProvider, id: UUID())
+        XCTAssertTrue(ReorderDrag.isReorderProvider(internalProvider))
+
+        // 外部文件拖拽（访达等价载荷：public.file-url）→ 判定为外部
+        let url = URL(fileURLWithPath: "/tmp/外部文件.txt")
+        let fileProvider = NSItemProvider(object: url as NSURL)
+        XCTAssertFalse(ReorderDrag.isReorderProvider(fileProvider))
+
+        // 外部文本 / 链接拖拽（曾出现误命中的载荷形态）→ 判定为外部
+        let textProvider = NSItemProvider(object: "https://example.com" as NSString)
+        XCTAssertFalse(ReorderDrag.isReorderProvider(textProvider))
+    }
 }
