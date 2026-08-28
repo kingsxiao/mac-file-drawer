@@ -1,8 +1,26 @@
 # 文件抽屉 · macOS File Drawer
 
+[![CI](https://github.com/kingsxiao/mac-file-drawer/actions/workflows/ci.yml/badge.svg)](https://github.com/kingsxiao/mac-file-drawer/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/kingsxiao/mac-file-drawer?include_prereleases&label=%E6%9C%80%E6%96%B0%E7%89%88)](https://github.com/kingsxiao/mac-file-drawer/releases)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+![Platform](https://img.shields.io/badge/macOS-14%2B-black)
+![Swift](https://img.shields.io/badge/Swift-5.9-orange)
+
 一款极简的 macOS 桌面工具：启动后，屏幕右侧滑出一个半透明「抽屉」，可以把文件/文件夹随手放进去暂存，需要时再拖出来继续使用。
 
 用 **Swift + AppKit(NSPanel) + SwiftUI** 实现，无任何第三方依赖。
+
+> **English**: File Drawer is a minimal macOS utility — a translucent drawer that slides out from the screen edge, so you can stash files & folders at hand and drag them out when needed. Swift + AppKit + SwiftUI, zero third-party dependencies. Full documentation below is in Chinese.
+
+## 下载安装
+
+从 [**Releases**](https://github.com/kingsxiao/mac-file-drawer/releases) 下载 DMG
+（universal，Apple Silicon / Intel 通用；附 `SHA256SUMS.txt` 可校验完整性），
+挂载后把 **FileDrawer 拖进 Applications** 即可。当前为 ad-hoc 签名，首次打开会被
+Gatekeeper 拦截：在访达里**右键 → 打开**放行（详见[「分发与公证就绪」](#分发与公证就绪)）。
+
+喜欢源码方式：`git clone` 后 `make install` 一键构建安装，或 `make dmg` 自行出包，
+见[参与贡献](CONTRIBUTING.md)。
 
 ## 设计
 
@@ -212,8 +230,16 @@ Gatekeeper 拦截（右键 → 打开放行，或 `xattr -dr com.apple.quarantin
 | 6 | 公证结果钉到 DMG | `xcrun stapler staple <dmg>` |
 | 7 | 验证 | `spctl -a -v --toplevel <app>` 应输出 `accepted`；`stapler validate <dmg>` |
 
-CI 侧对应改动：`ci.yml` 里 `zsh ./make_app.sh` 步骤不变（签名参数走环境变量
-`SIGN_IDENTITY`），加两步 notarytool submit / stapler staple，凭据用 GitHub Secrets。
+以上清单已由 `.github/workflows/release.yml` 全部自动化：推送 `v*` tag 即自动
+测试 → 零警告 → universal 构建 → 打包 → 发 GitHub Release（Notes 取自 CHANGELOG 对应段，
+附 DMG / zip / SHA256SUMS）。仓库 Secrets 配置后自动启用：
+
+| Secret | 用途 |
+| --- | --- |
+| `SIGN_IDENTITY` | 如 `Developer ID Application: 名字 (TeamID)`；不配置则 ad-hoc 签名 |
+| `APPLE_ID` + `APPLE_APP_SPECIFIC_PASSWORD` + `APPLE_TEAM_ID` | 三者齐备时对 DMG notarytool 公证 + stapler 钉证 |
+
+本地手工出包时 `SIGN_IDENTITY` 环境变量同样生效：`SIGN_IDENTITY="Developer ID Application: …" make dmg`。
 
 ## 界面语言（中 / 英）
 
@@ -345,3 +371,19 @@ make_app.sh / install.sh / uninstall.sh / make_dmg.sh / Makefile
 - **可观测与稳健性**：诊断日志（内存环形 200 条 + os_log 双写，菜单栏可导出）埋点全部
   自动化动作与迁移事件；条目落盘 150ms 防抖、退出即 flush；失效条目后台扫描（合并重扫）
   只影响展示不自动删；CI 带 release 零警告门禁。
+
+## 参与贡献
+
+欢迎 Issue 与 PR！开发环境、项目约定、发版流程见 [CONTRIBUTING.md](CONTRIBUTING.md)，
+社区行为准则见 [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)。
+发版由维护者执行：`zsh scripts/cut_release.sh --version x.y.z --push` 推 tag 自动出 Release。
+
+## 安全
+
+发现安全漏洞请**不要**开公开 Issue：使用
+[GitHub 私密漏洞报告](https://github.com/kingsxiao/mac-file-drawer/security/advisories/new)，
+支持版本、报告渠道与发行物校验方式见 [SECURITY.md](SECURITY.md)。
+
+## 许可证
+
+[MIT](LICENSE) © wangxiao (kingsxiao) and contributors

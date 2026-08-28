@@ -1,0 +1,76 @@
+name: 🐛 Bug 报告
+description: 抽屉行为异常、崩溃、显示不对等
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈！请先搜索[已有 Issue](https://github.com/kingsxiao/mac-file-drawer/issues?q=is%3Aissue) 避免重复。
+        涉及安全的问题请改用 Security → Advisories 私密报告，不要在此公开细节。
+  - type: input
+    id: app-version
+    attributes:
+      label: App 版本
+      description: 菜单栏 → 关于，或 DMG 文件名里的版本
+      placeholder: 如 1.6.0 (build 13)
+    validations:
+      required: true
+  - type: input
+    id: macos-version
+    attributes:
+      label: macOS 版本
+      placeholder: 如 15.5
+    validations:
+      required: true
+  - type: dropdown
+    id: chip
+    attributes:
+      label: 芯片
+      options:
+        - Apple Silicon
+        - Intel
+    validations:
+      required: true
+  - type: dropdown
+    id: appearance
+    attributes:
+      label: 界面语言 / 外观
+      options:
+        - 中文 / 浅色
+        - 中文 / 深色
+        - English / Light
+        - English / Dark
+        - 跟随系统
+    validations:
+      required: false
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      description: 越具体越好，最好从全新状态开始
+      placeholder: |
+        1. 打开抽屉
+        2. 拖入一个 …
+        3. 按 …
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望行为与实际行为
+      placeholder: 期望 …，实际 …
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: 诊断信息
+      description: 菜单栏 →「导出诊断信息…」生成的文件内容（确认不含敏感路径后再贴）
+    validations:
+      required: false
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: 截图 / 录屏
+    validations:
+      required: false

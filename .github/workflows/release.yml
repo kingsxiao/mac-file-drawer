@@ -1,0 +1,135 @@
+name: Release
+
+# 推送 v* tag 自动发版；也可手动触发只出包不发（验证打包链路用）。
+# 前置约定见 CONTRIBUTING.md「发版流程」：tag 必须与 make_app.sh 的 VERSION 一致。
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build, verify & publish
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+
+      - name: Test
+        run: |
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test
+          else
+            echo "手动触发：跳过测试（tag 发版才全量跑）"
+          fi
+
+      - name: Zero-warning gate
+        run: |
+          set -o pipefail
+          swift build -c release 2>&1 | tee /tmp/release-build.log
+          if grep -q "warning:" /tmp/release-build.log; then
+            echo "::error::Release build has compiler warnings"
+            grep -n "warning:" /tmp/release-build.log || true
+            exit 1
+          fi
+
+      # 签名：Secrets 配了 SIGN_IDENTITY 走 Developer ID 正式签名（含 --options runtime），
+      # 未配置保持 ad-hoc（Gatekeeper 会拦，属预期，见 README「分发与公证就绪」）
+      - name: Package .app + DMG (universal)
+        env:
+          SIGN_IDENTITY: ${{ secrets.SIGN_IDENTITY }}
+        run: zsh ./make_dmg.sh --universal
+
+      - name: Verify tag matches app version
+        if: github.event_name == 'push'
+        run: |
+          APP_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' build/FileDrawer.app/Contents/Info.plist)"
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          if [[ "$APP_VERSION" != "$TAG_VERSION" ]]; then
+            echo "::error::tag v$TAG_VERSION 与 make_app.sh 的 VERSION $APP_VERSION 不一致——请用 scripts/cut_release.sh 发版，或改齐后重新打 tag"
+            exit 1
+          fi
+          echo "版本一致：v$APP_VERSION"
+
+      - name: Zip app
+        run: ditto -c -k --keepParent build/FileDrawer.app build/FileDrawer.zip
+
+      # 可选公证：配置 APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD / APPLE_TEAM_ID 三个 Secrets 后自动启用，
+      # 对 DMG 公证并 staple；未配置则跳过（ad-hoc 分发）
+      - name: Notarize & staple DMG (optional)
+        if: github.event_name == 'push'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          if [[ -z "$APPLE_ID" || -z "$APPLE_APP_SPECIFIC_PASSWORD" || -z "$APPLE_TEAM_ID" ]]; then
+            echo "未配置公证凭据 Secrets，跳过公证（ad-hoc 分发）"
+            exit 0
+          fi
+          DMG="$(ls build/*.dmg)"
+          xcrun notarytool store-credentials filedrawer-notary \
+            --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" \
+            --password "$APPLE_APP_SPECIFIC_PASSWORD"
+          xcrun notarytool submit "$DMG" --keychain-profile filedrawer-notary --wait
+          xcrun stapler staple "$DMG"
+          xcrun stapler validate "$DMG"
+
+      - name: Checksums
+        working-directory: build
+        run: |
+          shasum -a 256 FileDrawer.zip *.dmg > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Release notes from CHANGELOG
+        if: github.event_name == 'push'
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          # 段标题格式：## 1.7.0（build 14）（全角括号）；优先取版本段，没有则回退 Unreleased
+          awk -v ver="$VERSION" '
+            BEGIN { mode = "none" }
+            $0 ~ ("^## " ver "（") { mode = "ver"; next }
+            $0 == "## Unreleased" && mode != "ver" { mode = "unrel"; next }
+            /^## / {
+              if (mode == "ver") exit
+              if (mode == "unrel") mode = "none"
+              next
+            }
+            mode == "ver"   { print; next }
+            mode == "unrel" { unrel = unrel $0 "\n"; next }
+            END { if (mode == "none" && unrel != "") printf "%s", unrel }
+          ' CHANGELOG.md > /tmp/release_notes.md
+          if [[ ! -s /tmp/release_notes.md ]]; then
+            { echo "## FileDrawer v$VERSION"; echo
+              echo "- 发布说明暂缺：请补充 CHANGELOG.md 中 ${VERSION}（build N）段落。"; } > /tmp/release_notes.md
+          fi
+          cat /tmp/release_notes.md
+
+      - name: Create GitHub Release
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          FLAGS=()
+          if [[ "$GITHUB_REF_NAME" == *-* ]]; then FLAGS+=(--prerelease); fi
+          gh release create "$GITHUB_REF_NAME" \
+            build/FileDrawer.zip build/*.dmg build/SHA256SUMS.txt \
+            --title "FileDrawer v$VERSION" \
+            --notes-file /tmp/release_notes.md \
+            "${FLAGS[@]+"${FLAGS[@]}"}"
+
+      - name: Upload artifacts (workflow_dispatch only)
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: FileDrawer-dist
+          path: |
+            build/FileDrawer.zip
+            build/*.dmg
+            build/SHA256SUMS.txt
