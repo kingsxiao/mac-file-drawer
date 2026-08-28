@@ -83,6 +83,26 @@ enum DrawerLayout {
         return frame
     }
 
+    /// 面板帧中心点所在的屏幕序号；不在任何屏内（真滑出停放）返回 nil。
+    /// 用中心点而非相交面积判定归属：抽屉完整落在单屏内，中心点在哪块屏整窗就在哪块屏。
+    static func homeScreenIndex(of frame: NSRect, screenFrames: [NSRect]) -> Int? {
+        let center = NSPoint(x: frame.midX, y: frame.midY)
+        return screenFrames.firstIndex { NSPointInRect(center, $0) }
+    }
+
+    /// 聚焦屏跟随判定：面板当前所在屏 ≠ 目标屏才需要迁移。
+    /// 面板在屏幕外（中心不在任何屏内，隐藏停放态）返回 false——不可见不跟随，
+    /// 下次展开自然落到当时的聚焦屏。
+    static func shouldFollowFocusScreen(
+        panelFrame: NSRect,
+        targetFrame: NSRect,
+        screenFrames: [NSRect]
+    ) -> Bool {
+        guard let home = homeScreenIndex(of: panelFrame, screenFrames: screenFrames),
+              let target = screenFrames.firstIndex(of: targetFrame) else { return false }
+        return home != target
+    }
+
     /// 起止帧中心是否分属不同屏幕（跨屏定位应瞬移：位移动画会拖着窗口
     /// 横穿中间的屏幕，「飞过桌面」）。from 中心不在任何屏内（真滑出停放、
     /// 邻侧无屏）不算跨屏——朝同侧滑入只掠过目标屏自身边缘。

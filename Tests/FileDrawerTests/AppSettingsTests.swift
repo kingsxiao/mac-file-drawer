@@ -273,6 +273,59 @@ final class AppSettingsTests: XCTestCase {
         }
     }
 
+    // MARK: - 聚焦屏跟随
+
+    /// 归属屏判定：面板帧中心落在哪块屏整窗就在哪块屏（含负坐标屏）
+    func testHomeScreenIndexOnMultiDisplay() {
+        MainActor.assumeIsolated {
+            // 主屏 A (0..1920)，右侧竖屏 B (1920..3840)，左侧屏 C（负坐标）
+            let a = NSRect(x: 0, y: 0, width: 1920, height: 1080)
+            let b = NSRect(x: 1920, y: 0, width: 1080, height: 1920)
+            let c = NSRect(x: -1440, y: 0, width: 1440, height: 900)
+            let frames = [a, b, c]
+
+            // 贴 A 右缘的展开抽屉
+            let expandedOnA = NSRect(x: 1590, y: 40, width: 330, height: 1000)
+            XCTAssertEqual(DrawerLayout.homeScreenIndex(of: expandedOnA, screenFrames: frames), 0)
+            // 贴 B 右缘的收起边条（B 右缘 x=3000）
+            let tabOnB = NSRect(x: 2954, y: 862, width: 46, height: 196)
+            XCTAssertEqual(DrawerLayout.homeScreenIndex(of: tabOnB, screenFrames: frames), 1)
+            // 贴 C 左缘的展开抽屉（负坐标屏）
+            let expandedOnC = NSRect(x: -1440, y: 50, width: 330, height: 800)
+            XCTAssertEqual(DrawerLayout.homeScreenIndex(of: expandedOnC, screenFrames: frames), 2)
+
+            // 真滑出停放（中心在所有屏外）→ 无归属
+            let parkedOff = NSRect(x: 3004, y: 400, width: 330, height: 1000)
+            XCTAssertNil(DrawerLayout.homeScreenIndex(of: parkedOff, screenFrames: frames))
+        }
+    }
+
+    /// 跟随决策：抽屉所在屏 ≠ 聚焦屏才迁移；屏幕外停放（隐藏态）不跟随
+    func testShouldFollowFocusScreen() {
+        MainActor.assumeIsolated {
+            let a = NSRect(x: 0, y: 0, width: 1920, height: 1080)
+            let b = NSRect(x: 1920, y: 0, width: 1080, height: 1920)
+            let frames = [a, b]
+
+            let drawerOnA = NSRect(x: 1590, y: 40, width: 330, height: 1000)
+            let drawerOnB = NSRect(x: 2540, y: 300, width: 460, height: 1000)
+
+            // 抽屉在 A，聚焦切到 B → 迁移；反之亦然
+            XCTAssertTrue(DrawerLayout.shouldFollowFocusScreen(panelFrame: drawerOnA, targetFrame: b, screenFrames: frames))
+            XCTAssertTrue(DrawerLayout.shouldFollowFocusScreen(panelFrame: drawerOnB, targetFrame: a, screenFrames: frames))
+            // 同屏（含目标就是当前所在屏）→ 不动
+            XCTAssertFalse(DrawerLayout.shouldFollowFocusScreen(panelFrame: drawerOnA, targetFrame: a, screenFrames: frames))
+            XCTAssertFalse(DrawerLayout.shouldFollowFocusScreen(panelFrame: drawerOnB, targetFrame: b, screenFrames: frames))
+
+            // 隐藏停放（中心在所有屏外）→ 不跟随
+            let parkedOff = NSRect(x: 3004, y: 400, width: 330, height: 1000)
+            XCTAssertFalse(DrawerLayout.shouldFollowFocusScreen(panelFrame: parkedOff, targetFrame: b, screenFrames: frames))
+
+            // 异常输入：聚焦屏解析不到 → 不动（避免误迁移）
+            XCTAssertFalse(DrawerLayout.shouldFollowFocusScreen(panelFrame: drawerOnA, targetFrame: NSRect(x: 9999, y: 9999, width: 100, height: 100), screenFrames: frames))
+        }
+    }
+
     // MARK: - 热键
 
     func testCarbonModifierConversion() {

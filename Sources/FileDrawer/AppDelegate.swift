@@ -232,6 +232,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let keyboardRouter = KeyboardRouter()
     private let settings = AppSettings.shared
     private var settingsCancellable: AnyCancellable?
+    // 聚焦屏跟随的事件监听 / 通知 / 兜底轮询（持有 token 防释放）
+    private var screenFocusMonitors: [Any] = []
+    private var screenFocusObservers: [NSObjectProtocol] = []
+    private var screenFocusTimer: Timer?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let store = ShelfStore.shared
@@ -280,6 +284,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self, selector: #selector(appDidResignActive),
             name: NSApplication.didResignActiveNotification, object: nil
         )
+        startScreenFocusFollowing()
 
         // 收起状态变化 → 窗口边框在「抽屉」与「窄边条」之间动画
         InteractionModel.shared.onCollapseChange = { [weak self] collapsed in
@@ -373,6 +378,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !panel.isVisible {
             placeOffscreen()
             panel.makeKeyAndOrderFront(nil)
+        }
+        // 屏幕外真滑出停放可能停在与聚焦屏无关的另一块屏外侧（停放后聚焦屏变了）：
+        // 出发点不在任何屏内就重新停放到当前聚焦屏的外侧——否则滑入动画会
+        // 拖着窗口横穿中间的屏幕（crossesScreens 对「from 在屏外」不判跨屏）。
+        // 停放侧没变时这里是同帧重放，无感。
+        if DrawerLayout.homeScreenIndex(of: panel.frame, screenFrames: NSScreen.screens.map(\.frame)) == nil {
+            placeOffscreen()
         }
         isOpen = true
         animateFrame(
@@ -474,6 +486,52 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 otherScreenFrames: neighborFrames
             )
         }
+    }
+
+    // MARK: - 聚焦屏跟随
+
+    /// 聚焦屏变化时把可见状态的抽屉迁到聚焦屏的停靠边（展开态 / 收起边条同理；
+    /// 跨屏迁移走瞬移，不会拖着窗口飞过桌面）。隐藏停放态不跟随，见 slideInExpanded。
+    /// 触发源：点击另一块屏、把窗口拖到另一块屏（全局鼠标按下 / 抬起）、⌘Tab 切应用、
+    /// 切换空间，以及纯键盘焦点漂移（⌘W 关窗后焦点回落等）的 1s 兜底轮询。
+    /// 轮询只在「跟随聚焦屏」模式启用：跟随鼠标屏模式下鼠标划过邻屏不算聚焦变化，
+    /// 定时轮询会让抽屉追着光标在两块屏之间来回跳——该模式只在离散事件时重评估。
+    private func startScreenFocusFollowing() {
+        let clickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .leftMouseUp]) { [weak self] _ in
+            Task { @MainActor in self?.followFocusedScreenIfNeeded() }
+        }
+        if let clickMonitor {
+            screenFocusMonitors.append(clickMonitor)
+        }
+        let workspaceCenter = NSWorkspace.shared.notificationCenter
+        for name in [NSWorkspace.didActivateApplicationNotification, NSWorkspace.activeSpaceDidChangeNotification] {
+            screenFocusObservers.append(
+                workspaceCenter.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                    Task { @MainActor in self?.followFocusedScreenIfNeeded() }
+                }
+            )
+        }
+        screenFocusTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.pollFocusedScreenIfNeeded() }
+        }
+    }
+
+    /// 轮询入口：仅聚焦屏（key 窗口所在屏）模式生效，理由见 startScreenFocusFollowing
+    private func pollFocusedScreenIfNeeded() {
+        guard !settings.followMouseScreen else { return }
+        followFocusedScreenIfNeeded()
+    }
+
+    /// 目标屏与抽屉所在屏不一致才迁移；目标屏拿不到（无屏）不动
+    private func followFocusedScreenIfNeeded() {
+        guard panel != nil, isOpen || InteractionModel.shared.isCollapsed else { return }
+        guard let target = DrawerLayout.targetScreen(followMouse: settings.followMouseScreen) ?? NSScreen.screens.first else { return }
+        guard DrawerLayout.shouldFollowFocusScreen(
+            panelFrame: panel.frame,
+            targetFrame: target.frame,
+            screenFrames: NSScreen.screens.map(\.frame)
+        ) else { return }
+        repositionPanel()
     }
 
     private func refreshStatusTitle() {

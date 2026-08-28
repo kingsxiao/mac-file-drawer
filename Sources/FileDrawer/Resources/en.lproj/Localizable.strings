@@ -71,7 +71,7 @@
 "垂直位置" = "Vertical Position";
 "停靠边缘" = "Dock Edge";
 "展开时停靠到鼠标所在屏幕" = "Dock to Screen with Mouse";
-"多显示器：在哪块屏展开就贴哪块屏；关闭则始终主屏幕" = "Multi-display: the drawer docks to the screen it opens on; off = always main display";
+"多显示器：在哪块屏展开就贴哪块屏；关闭则跟随聚焦屏并自动迁移" = "Multi-display: the drawer docks to the screen it opens on; off = follow the focused screen and migrate automatically";
 "材质与列表" = "Material & List";
 "毛玻璃浓度" = "Material Opacity";
 "紧凑列表" = "Compact List";

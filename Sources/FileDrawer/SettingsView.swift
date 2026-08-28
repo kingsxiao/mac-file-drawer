@@ -270,7 +270,7 @@ private struct AppearanceSettingsTab: View {
                     }
                 }
                 Toggle(L10n.t("展开时停靠到鼠标所在屏幕"), isOn: $settings.followMouseScreen)
-                    .help(L10n.t("多显示器：在哪块屏展开就贴哪块屏；关闭则始终主屏幕"))
+                    .help(L10n.t("多显示器：在哪块屏展开就贴哪块屏；关闭则跟随聚焦屏并自动迁移"))
             }
             Section(L10n.t("材质与列表")) {
                 Picker(L10n.t("毛玻璃浓度"), selection: $settings.material) {

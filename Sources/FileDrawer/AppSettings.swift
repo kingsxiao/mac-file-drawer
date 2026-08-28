@@ -345,7 +345,8 @@ final class AppSettings: ObservableObject {
     @Published var showDockIcon: Bool {
         didSet { defaults.set(showDockIcon, forKey: Keys.showDockIcon) }
     }
-    /// 多显示器：展开时停靠到鼠标所在屏幕（关闭则始终主屏幕）
+    /// 多显示器：展开时停靠到鼠标所在屏幕；关闭则跟随聚焦屏（key 窗口所在屏）。
+    /// 两种模式下聚焦屏变化都会自动迁移（见 AppDelegate 聚焦屏跟随）
     @Published var followMouseScreen: Bool {
         didSet { defaults.set(followMouseScreen, forKey: Keys.followMouseScreen) }
     }
