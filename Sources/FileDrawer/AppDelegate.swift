@@ -237,8 +237,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let store = ShelfStore.shared
         let hostingView = NSHostingView(rootView: ContentView(store: store, interaction: .shared))
 
-        guard let screen = DrawerLayout.targetScreen(followMouse: settings.followMouseScreen) else { return }
-        let size = DrawerLayout.expandedSize(visibleFrame: screen.visibleFrame, settings: settings)
+        // 无屏（headless 启动 / 显示器全部断开）也完成初始化：菜单栏、
+        // 热键、屏幕监听先就位，显示器接入后 didChangeScreenParameters 立即重新定位
+        let visibleFrame = DrawerLayout.targetScreen(followMouse: settings.followMouseScreen)?.visibleFrame
+            ?? DrawerLayout.fallbackVisibleFrame
+        let size = DrawerLayout.expandedSize(visibleFrame: visibleFrame, settings: settings)
 
         panel = DrawerPanel(
             contentRect: NSRect(origin: .zero, size: size),
@@ -330,15 +333,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// 窗口 frame 动画统一走弹簧物理（带轻微过冲回弹），
     /// 抽屉滑入滑出更有"从屏幕里抽出来"的手感。
+    /// 跨屏定位（跟随鼠标换屏 / 显示器热插拔后重定位）例外：位移动画
+    /// 会拖着窗口横穿中间的屏幕，肉眼可见「飞过桌面」——直接在目标屏就位。
     private func animateFrame(to frame: NSRect) {
+        if DrawerLayout.crossesScreens(from: panel.frame, to: frame, screenFrames: NSScreen.screens.map(\.frame)) {
+            WindowSpringAnimator.shared.cancel()
+            panel.setFrame(frame, display: true)
+            return
+        }
         WindowSpringAnimator.shared.animate(window: panel, to: frame)
+    }
+
+    /// 目标屏可视区（无屏时兜底）+ 其余屏幕的帧（供滑出姿态做邻屏相交判定）
+    private func placementContext() -> (visibleFrame: NSRect, neighborFrames: [NSRect]) {
+        let screen = DrawerLayout.targetScreen(followMouse: settings.followMouseScreen)
+        return (
+            screen?.visibleFrame ?? DrawerLayout.fallbackVisibleFrame,
+            NSScreen.screens.filter { $0 != screen }.map(\.frame)
+        )
     }
 
     /// 初始停在屏幕外
     private func placeOffscreen() {
         WindowSpringAnimator.shared.cancel()
+        let placement = placementContext()
         panel.setFrame(
-            DrawerLayout.offscreenFrame(visibleFrame: (DrawerLayout.targetScreen(followMouse: settings.followMouseScreen)?.visibleFrame ?? .zero), settings: settings),
+            DrawerLayout.offscreenFrame(
+                visibleFrame: placement.visibleFrame,
+                settings: settings,
+                otherScreenFrames: placement.neighborFrames
+            ),
             display: false
         )
         isOpen = false
@@ -352,7 +376,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         isOpen = true
         animateFrame(
-            to: DrawerLayout.expandedFrame(visibleFrame: (DrawerLayout.targetScreen(followMouse: settings.followMouseScreen)?.visibleFrame ?? .zero), settings: settings)
+            to: DrawerLayout.expandedFrame(visibleFrame: placementContext().visibleFrame, settings: settings)
         )
         refreshStatusTitle()
     }
@@ -438,12 +462,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func targetFrame(for screen: NSScreen) -> NSRect {
         let visibleFrame = screen.visibleFrame
+        let neighborFrames = NSScreen.screens.filter { $0 != screen }.map(\.frame)
         if InteractionModel.shared.isCollapsed {
             return DrawerLayout.collapsedFrame(visibleFrame: visibleFrame, settings: settings)
         } else if isOpen {
             return DrawerLayout.expandedFrame(visibleFrame: visibleFrame, settings: settings)
         } else {
-            return DrawerLayout.offscreenFrame(visibleFrame: visibleFrame, settings: settings)
+            return DrawerLayout.offscreenFrame(
+                visibleFrame: visibleFrame,
+                settings: settings,
+                otherScreenFrames: neighborFrames
+            )
         }
     }
 

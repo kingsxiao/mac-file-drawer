@@ -171,6 +171,108 @@ final class AppSettingsTests: XCTestCase {
         }
     }
 
+    // MARK: - 多显示器适配
+
+    /// 右缘紧邻另一块屏：滑出矩形会落在邻屏可见区域，必须退化为收起边条姿态
+    func testOffscreenFrameAvoidsNeighborDisplayOnRight() {
+        let (defaults, name) = makeDefaults()
+        defer { defaults.removePersistentDomain(forName: name) }
+
+        MainActor.assumeIsolated {
+            let s = AppSettings(defaults: defaults)
+            // 主屏 A (0..1920)，邻屏 B 紧贴其右侧
+            let vf = NSRect(x: 0, y: 0, width: 1920, height: 1080)
+            let neighbor = NSRect(x: 1920, y: 0, width: 1080, height: 1920)
+
+            let naive = DrawerLayout.offscreenFrame(visibleFrame: vf, settings: s)
+            XCTAssertTrue(naive.intersects(neighbor), "前置：默认滑出帧确实会落在邻屏上")
+
+            let offscreen = DrawerLayout.offscreenFrame(
+                visibleFrame: vf, settings: s, otherScreenFrames: [neighbor]
+            )
+            XCTAssertFalse(offscreen.intersects(neighbor), "停放帧不得与邻屏相交")
+            XCTAssertEqual(offscreen, DrawerLayout.collapsedFrame(visibleFrame: vf, settings: s))
+        }
+    }
+
+    /// 左缘镜像：左侧邻屏同理
+    func testOffscreenFrameAvoidsNeighborDisplayOnLeft() {
+        let (defaults, name) = makeDefaults()
+        defer { defaults.removePersistentDomain(forName: name) }
+
+        MainActor.assumeIsolated {
+            let s = AppSettings(defaults: defaults)
+            s.edge = .left
+            // 目标屏 B (1920..3840)，邻屏 A 紧贴其左侧
+            let vf = NSRect(x: 1920, y: 0, width: 1920, height: 1080)
+            let neighbor = NSRect(x: 0, y: 0, width: 1920, height: 1080)
+
+            let offscreen = DrawerLayout.offscreenFrame(
+                visibleFrame: vf, settings: s, otherScreenFrames: [neighbor]
+            )
+            XCTAssertFalse(offscreen.intersects(neighbor))
+            XCTAssertEqual(offscreen, DrawerLayout.collapsedFrame(visibleFrame: vf, settings: s))
+        }
+    }
+
+    /// 邻屏在正上 / 正下方（不与滑出矩形相交）：保持原滑出姿态
+    func testOffscreenFrameKeepsSlideOutForStackedDisplays() {
+        let (defaults, name) = makeDefaults()
+        defer { defaults.removePersistentDomain(forName: name) }
+
+        MainActor.assumeIsolated {
+            let s = AppSettings(defaults: defaults)
+            let vf = NSRect(x: 0, y: 0, width: 1920, height: 1080)
+            let neighborAbove = NSRect(x: 0, y: 1080, width: 1920, height: 1080)
+
+            let offscreen = DrawerLayout.offscreenFrame(
+                visibleFrame: vf, settings: s, otherScreenFrames: [neighborAbove]
+            )
+            XCTAssertEqual(offscreen.minX, vf.maxX + 4, accuracy: 0.01)
+        }
+    }
+
+    /// 无邻屏信息（单屏）时行为与旧契约完全一致
+    func testOffscreenFrameUnchangedWithoutNeighbors() {
+        let (defaults, name) = makeDefaults()
+        defer { defaults.removePersistentDomain(forName: name) }
+
+        MainActor.assumeIsolated {
+            let s = AppSettings(defaults: defaults)
+            let vf = NSRect(x: 0, y: 0, width: 1512, height: 900)
+            XCTAssertEqual(
+                DrawerLayout.offscreenFrame(visibleFrame: vf, settings: s).minX,
+                vf.maxX + 4, accuracy: 0.01
+            )
+            XCTAssertEqual(
+                DrawerLayout.offscreenFrame(visibleFrame: vf, settings: s, otherScreenFrames: []).minX,
+                vf.maxX + 4, accuracy: 0.01
+            )
+        }
+    }
+
+    /// 跨屏判定：起止帧中心分属不同屏 → 瞬移；真滑出停放（中心在所有屏外）不算跨屏
+    func testCrossScreensDetection() {
+        MainActor.assumeIsolated {
+            let screenA = NSRect(x: 0, y: 0, width: 1920, height: 1080)
+            let screenB = NSRect(x: 1920, y: 0, width: 1080, height: 1920)
+            let frames = [screenA, screenB]
+
+            let onA = NSRect(x: 1600, y: 300, width: 320, height: 500)
+            let onB = NSRect(x: 2100, y: 300, width: 320, height: 500)
+            XCTAssertTrue(DrawerLayout.crossesScreens(from: onA, to: onB, screenFrames: frames))
+            XCTAssertTrue(DrawerLayout.crossesScreens(from: onB, to: onA, screenFrames: frames))
+            XCTAssertFalse(DrawerLayout.crossesScreens(from: onA, to: onA, screenFrames: frames))
+
+            // 真滑出态（邻侧无屏）：中心落在所有屏之外，滑入动画合法
+            let parkedOff = NSRect(x: 3830, y: 400, width: 330, height: 1000)
+            XCTAssertFalse(DrawerLayout.crossesScreens(from: parkedOff, to: onB, screenFrames: frames))
+
+            // 目标不在任何屏上（异常输入）→ 保守瞬移
+            XCTAssertTrue(DrawerLayout.crossesScreens(from: onA, to: parkedOff, screenFrames: frames))
+        }
+    }
+
     // MARK: - 热键
 
     func testCarbonModifierConversion() {

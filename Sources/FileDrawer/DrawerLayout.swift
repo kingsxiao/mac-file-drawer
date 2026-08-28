@@ -11,6 +11,10 @@ enum DrawerLayout {
     static let margin: CGFloat = 24
     static let minDrawerHeight: CGFloat = 360
     static let collapsedTabSize = CGSize(width: 46, height: 196)
+    /// 无屏（headless 启动 / 显示器全部断开）时的兜底可视区：
+    /// 仅为让初始化完整走通（菜单栏图标、热键、屏幕变化监听先就位），
+    /// 显示器接入后 didChangeScreenParameters 会立即重新定位。
+    static let fallbackVisibleFrame = NSRect(x: 0, y: 0, width: 1440, height: 900)
 
     /// 目标屏幕：跟随鼠标时取指针所在屏（多显示器场景），
     /// 否则主屏；都拿不到时兜底任意一块屏。
@@ -60,12 +64,34 @@ enum DrawerLayout {
         )
     }
 
-    /// 屏幕外（启动前 / 滑出后）：朝停靠侧完全滑出屏幕
-    static func offscreenFrame(visibleFrame: NSRect, settings: AppSettings) -> NSRect {
+    /// 屏幕外（启动前 / 滑出后）：朝停靠侧完全滑出屏幕。
+    /// 多显示器：停靠边外侧紧邻另一块屏时，滑出矩形会落在邻屏的可见区域上
+    /// （表现为抽屉「从隔壁屏幕里飞出来」，隐藏停放时停在邻屏可见）——
+    /// 此时退化为收起边条姿态作为出发 / 停放帧，与其他展开动画同构、永不跨屏。
+    static func offscreenFrame(
+        visibleFrame: NSRect,
+        settings: AppSettings,
+        otherScreenFrames: [NSRect] = []
+    ) -> NSRect {
         var frame = expandedFrame(visibleFrame: visibleFrame, settings: settings)
         frame.origin.x = settings.edge == .right
             ? visibleFrame.maxX + 4
             : visibleFrame.minX - frame.width - 4
+        if otherScreenFrames.contains(where: { frame.intersects($0) }) {
+            frame = collapsedFrame(visibleFrame: visibleFrame, settings: settings)
+        }
         return frame
+    }
+
+    /// 起止帧中心是否分属不同屏幕（跨屏定位应瞬移：位移动画会拖着窗口
+    /// 横穿中间的屏幕，「飞过桌面」）。from 中心不在任何屏内（真滑出停放、
+    /// 邻侧无屏）不算跨屏——朝同侧滑入只掠过目标屏自身边缘。
+    static func crossesScreens(from: NSRect, to: NSRect, screenFrames: [NSRect]) -> Bool {
+        func homeIndex(of rect: NSRect) -> Int? {
+            screenFrames.firstIndex { $0.contains(NSPoint(x: rect.midX, y: rect.midY)) }
+        }
+        guard let origin = homeIndex(of: from) else { return false }
+        guard let target = homeIndex(of: to) else { return true }
+        return origin != target
     }
 }
