@@ -135,9 +135,9 @@ final class AppSettingsTests: XCTestCase {
                 accuracy: 0.01
             )
 
-            // 收起边条：42 宽、垂直居中、贴右缘
+            // 收起边条：46 宽、垂直居中、贴右缘
             let collapsed = DrawerLayout.collapsedFrame(visibleFrame: vf, settings: s)
-            XCTAssertEqual(collapsed.width, 42, accuracy: 0.01)
+            XCTAssertEqual(collapsed.width, 46, accuracy: 0.01)
             XCTAssertEqual(collapsed.maxX, vf.maxX, accuracy: 0.01)
             XCTAssertEqual(collapsed.midY, vf.midY, accuracy: 0.01)
 

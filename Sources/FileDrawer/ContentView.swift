@@ -25,7 +25,7 @@ struct ContentView: View {
     var body: some View {
         Group {
             if interaction.isCollapsed {
-                CollapsedTabView(store: store, interaction: interaction)
+                CollapsedTabView(store: store, interaction: interaction, isDropTargeted: $isDropTargeted)
                     .transition(.opacity)
             } else {
                 expandedContent
@@ -1241,16 +1241,34 @@ private struct ItemRow: View {
     }
 }
 
-// MARK: - 收起态：贴右缘的窄边条，点击展开；拖文件上去自动展开接收
+// MARK: - 收起态：贴屏幕边缘的窄边条，点击展开；拖文件上去自动展开接收
+// 设计：上段「纸叠」透出最近几条的缩略瓷片（像从抽屉缝里露出的纸堆），
+// 中段把手（品牌色胶囊 + 指向屏幕中线的 chevron，指示拉开方向），
+// 下段品牌色计数徽章；空态换成虚线纸槽。
 
 private struct CollapsedTabView: View {
     @ObservedObject var store: ShelfStore
     @ObservedObject var interaction: InteractionModel
+    /// 外部文件拖到边条上时的高亮（自动展开关闭时也要有可见反馈）
+    @Binding var isDropTargeted: Bool
     @ObservedObject private var settings = AppSettings.shared
     @State private var hovered = false
 
+    private static let peekLimit = 3
+    private static let tileSize: CGFloat = 24
+
+    /// 纸叠内容：与展开后看到的顺序一致的前几条
+    private var peekItems: [ShelfItem] {
+        Array(interaction.displayItems(
+            from: store.currentItems,
+            sort: interaction.sortMode(for: store.currentDrawerID)
+        ).prefix(Self.peekLimit))
+    }
+
+    private var peekItemIDs: [UUID] { peekItems.map(\.id) }
+
     private var tabShape: UnevenRoundedRectangle {
-        let radius: CGFloat = 17
+        let radius: CGFloat = 18
         return settings.edge == .right
             ? UnevenRoundedRectangle(
                 topLeadingRadius: radius,
@@ -1290,31 +1308,27 @@ private struct CollapsedTabView: View {
                     .allowsHitTesting(false)
                 }
                 .overlay {
-                    // 拖拽悬停时的接收高亮
+                    // 鼠标悬停 / 拖拽悬停时的接收高亮
                     tabShape
-                        .fill(DrawerTheme.accent.opacity(hovered ? 0.10 : 0))
+                        .fill(DrawerTheme.accent.opacity(isDropTargeted ? 0.14 : hovered ? 0.08 : 0))
                         .allowsHitTesting(false)
                 }
+                .overlay {
+                    if isDropTargeted {
+                        tabShape.strokeBorder(DrawerTheme.accent.opacity(0.7), lineWidth: 1.5)
+                            .allowsHitTesting(false)
+                    }
+                }
 
-            VStack(spacing: 7) {
-                Image(systemName: "tray.full")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(hovered ? AnyShapeStyle(DrawerTheme.accentGradient) : AnyShapeStyle(DrawerTheme.accent))
-                    .scaleEffect(hovered ? 1.1 : 1)
-
-                // 悬停时出现一条品牌渐变把手刻度，暗示可以拉开
-                Capsule()
-                    .fill(DrawerTheme.accentGradient)
-                    .frame(width: hovered ? 13 : 7, height: 2)
-                    .opacity(hovered ? 1 : 0.4)
-
+            VStack(spacing: 9) {
+                if peekItems.isEmpty {
+                    emptySlot
+                } else {
+                    peekStack
+                }
+                pullHandle
                 if !store.currentItems.isEmpty {
-                    Text("\(store.currentItems.count)")
-                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                        .monospacedDigit()
-                        .contentTransition(.numericText())
-                        .foregroundStyle(.secondary)
-                        .animation(DrawerMotion.bouncy, value: store.currentItems.count)
+                    countBadge
                 }
             }
         }
@@ -1330,9 +1344,80 @@ private struct CollapsedTabView: View {
                 interaction.isCollapsed = false
             }
         }
+        .onAppear { loadPeekThumbs() }
+        .onChange(of: peekItemIDs) { loadPeekThumbs() }
         .help(L10n.t("展开抽屉"))
         .accessibilityLabel(L10n.t("展开抽屉"))
         .accessibilityAddTraits(.isButton)
+    }
+
+    /// 纸叠：顶层最新、完整清晰；下两层向抽屉里退、渐暗渐小，上缘从顶层后面露出。
+    /// 统一细描边 + 顶层投影，保证深层露出的边在毛玻璃上读得出来。
+    private var peekStack: some View {
+        ZStack {
+            // 深层先画，顶层后画盖在上面
+            ForEach(Array(peekItems.enumerated().reversed()), id: \.element.id) { index, item in
+                let depth = CGFloat(index)
+                FileTile(item: item, store: store, size: Self.tileSize)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Self.tileSize * 0.27, style: .continuous)
+                            .strokeBorder(Color.primary.opacity(0.15), lineWidth: 0.6)
+                    )
+                    .scaleEffect(1 - depth * 0.09)
+                    .opacity(1 - depth * 0.22)
+                    .offset(y: -depth * 6)
+                    .shadow(
+                        color: .black.opacity(index == 0 ? 0.20 : 0.10),
+                        radius: 2.5, y: 1.5
+                    )
+            }
+        }
+        .offset(y: hovered ? -1.5 : 0)
+    }
+
+    /// 把手：胶囊槽 + 指向屏幕中线的 chevron，悬停时外探，暗示「往中间拉开」
+    private var pullHandle: some View {
+        VStack(spacing: 2) {
+            Capsule()
+                .fill(DrawerTheme.accentGradient)
+                .frame(width: hovered ? 14 : 10, height: 2.5)
+                .opacity(hovered ? 1 : 0.7)
+            Image(systemName: settings.edge == .right ? "chevron.compact.left" : "chevron.compact.right")
+                .font(.system(size: 12.5, weight: .semibold))
+                .foregroundStyle(DrawerTheme.accent.opacity(hovered ? 1 : 0.65))
+                .offset(x: hovered ? (settings.edge == .right ? -1.5 : 1.5) : 0)
+        }
+    }
+
+    /// 计数徽章：品牌渐变胶囊，与撤销 toast 的按钮同一视觉语言
+    private var countBadge: some View {
+        Text("\(store.currentItems.count)")
+            .font(.system(size: 10, weight: .bold, design: .rounded))
+            .monospacedDigit()
+            .foregroundStyle(.white)
+            .padding(.horizontal, 5.5)
+            .padding(.vertical, 1.5)
+            .background(Capsule().fill(DrawerTheme.accentGradient))
+            .overlay(Capsule().strokeBorder(.white.opacity(0.22), lineWidth: 0.5))
+            .contentTransition(.numericText())
+            .animation(DrawerMotion.bouncy, value: store.currentItems.count)
+    }
+
+    /// 空态：虚线纸槽 + 一抹浅浅的托盘图标
+    private var emptySlot: some View {
+        RoundedRectangle(cornerRadius: 7, style: .continuous)
+            .strokeBorder(Color.primary.opacity(0.16), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
+            .frame(width: 26, height: 26)
+            .overlay {
+                Image(systemName: "tray")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary.opacity(0.7))
+            }
+    }
+
+    /// 收起态也会透出缩略图：补齐纸叠条目的解码（未展开时 FileTile 行不会触发）
+    private func loadPeekThumbs() {
+        for item in peekItems { store.ensureThumb(for: item) }
     }
 }
 

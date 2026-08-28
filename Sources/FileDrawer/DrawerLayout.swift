@@ -10,7 +10,7 @@ enum DrawerLayout {
     /// 高度比例 = 1.0 时的上下呼吸边距
     static let margin: CGFloat = 24
     static let minDrawerHeight: CGFloat = 360
-    static let collapsedTabSize = CGSize(width: 42, height: 190)
+    static let collapsedTabSize = CGSize(width: 46, height: 196)
 
     /// 目标屏幕：跟随鼠标时取指针所在屏（多显示器场景），
     /// 否则主屏；都拿不到时兜底任意一块屏。
