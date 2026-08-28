@@ -254,12 +254,8 @@ struct ContentView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(PressScaleStyle(scale: 0.92))
-        .onHover { hovering in
-            handleHovered = hovering
-            (hovering ? NSCursor.pointingHand : NSCursor.arrow).set()
-        }
+        .iconHoverState($handleHovered, animation: .spring(response: 0.28, dampingFraction: 0.7))
         .animation(.easeOut(duration: 0.15), value: isDropTargeted)
-        .animation(.spring(response: 0.28, dampingFraction: 0.7), value: handleHovered)
         .help(L10n.t("收起成边条"))
         .accessibilityLabel(L10n.t("收起成边条"))
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: settings.edge == .right ? .leading : .trailing)
@@ -647,6 +643,8 @@ private struct HeaderView: View {
                     withAnimation(.easeOut(duration: 0.18)) {
                         interaction.setSortMode(mode, for: store.currentDrawerID)
                     }
+                    // 菜单跟踪期间 onHover 不派发，选中后显式熄灭，避免圆底卡亮
+                    withAnimation(DrawerMotion.iconHover) { sortHovered = false }
                 } label: {
                     if currentSort == mode {
                         Label(mode.label, systemImage: "checkmark")
@@ -656,9 +654,11 @@ private struct HeaderView: View {
                 }
             }
         } label: {
+            // 与 HoverCircleButton 同一套视觉语言：中性圆底 + 图标轻放大
             Image(systemName: "arrow.up.arrow.down")
-                .font(.system(size: 12, weight: .medium))
+                .font(.system(size: 25 * 0.46, weight: .medium))
                 .foregroundStyle(sortHovered ? Color.primary : Color.secondary)
+                .scaleEffect(sortHovered ? 1.1 : 1)
                 .frame(width: 25, height: 25)
                 .background(
                     Circle().fill(Color.primary.opacity(sortHovered ? 0.09 : 0))
@@ -668,10 +668,7 @@ private struct HeaderView: View {
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
         .fixedSize()
-        .onHover { hovering in
-            withAnimation(.easeOut(duration: 0.12)) { sortHovered = hovering }
-            (hovering ? NSCursor.pointingHand : NSCursor.arrow).set()
-        }
+        .iconHoverState($sortHovered)
         .help(L10n.t("排序（仅当前分组）"))
         .accessibilityLabel(L10n.t("排序（仅当前分组）"))
     }
@@ -1326,10 +1323,7 @@ private struct CollapsedTabView: View {
         .scaleEffect(hovered ? 1.03 : 1)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .contentShape(tabShape)
-        .onHover { hovering in
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) { hovered = hovering }
-            (hovering ? NSCursor.pointingHand : NSCursor.arrow).set()
-        }
+        .iconHoverState($hovered, animation: .spring(response: 0.3, dampingFraction: 0.75))
         .onTapGesture {
             DrawerPanel.active?.makeKeyAndOrderFront(nil)
             withAnimation(.spring(response: 0.42, dampingFraction: 0.9)) {

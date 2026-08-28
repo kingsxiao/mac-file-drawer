@@ -7,6 +7,27 @@ import UniformTypeIdentifiers
 // 从 ContentView.swift 机械拆分（零行为变化）：独立的子视图与复用组件。
 // ContentView 保留根视图、头部、条目行、收起边条、拖放代理。
 
+/// 小控件统一悬停处理：驱动点亮状态 + 手型光标 + 统一动效。
+/// 关键约束：悬停中视图被移除（收起抽屉 / 关搜索 / 移除行）时 SwiftUI 不再派发
+/// onHover(false)，光标会卡在手型——onDisappear 里主动复原箭头并熄灭状态。
+extension View {
+    func iconHoverState(
+        _ hovered: Binding<Bool>,
+        animation: Animation = DrawerMotion.iconHover
+    ) -> some View {
+        onHover { entering in
+            withAnimation(animation) { hovered.wrappedValue = entering }
+            // set() 无栈状态切换：不会因遗漏 pop 卡住光标
+            (entering ? NSCursor.pointingHand : NSCursor.arrow).set()
+        }
+        .onDisappear {
+            guard hovered.wrappedValue else { return }
+            hovered.wrappedValue = false
+            NSCursor.arrow.set()
+        }
+    }
+}
+
 struct HoverCircleButton: View {
     let systemImage: String
     var tip: String = ""
@@ -31,11 +52,7 @@ struct HoverCircleButton: View {
                 .contentShape(Circle())
         }
         .buttonStyle(PressScaleStyle())
-        .onHover { hovering in
-            withAnimation(.spring(response: 0.26, dampingFraction: 0.7)) { hovered = hovering }
-            // set() 无栈状态切换：视图在悬停中消失也不会卡住光标
-            (hovering ? NSCursor.pointingHand : NSCursor.arrow).set()
-        }
+        .iconHoverState($hovered)
         .help(tip)
         // 图标按钮必须有 VoiceOver 标签，否则读作「按钮」而无语义
         .accessibilityLabel(tip)

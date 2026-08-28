@@ -67,4 +67,6 @@ enum DrawerMotion {
     static let smooth = Animation.spring(response: 0.42, dampingFraction: 0.88)
     /// 快速淡入淡出
     static let fade = Animation.easeOut(duration: 0.16)
+    /// 小控件悬停点亮：干脆、几乎无回弹（小图标上回弹会显得抖）
+    static let iconHover = Animation.spring(response: 0.24, dampingFraction: 0.85)
 }
