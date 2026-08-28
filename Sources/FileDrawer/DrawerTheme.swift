@@ -19,6 +19,23 @@ enum DrawerTheme {
         )
     }
 
+    // 选中状态色：青瓷青。选中是高频长驻状态，与品牌靛紫刻意分开——
+    // 冷色的青釉不与品牌色抢戏，明暗两种玻璃上也读得清爽。
+    /// 选中主色：青碧（深色模式提亮）
+    static let selection = adaptive(light: 0x0D9488, dark: 0x2DD4BF)
+    /// 选中渐变端色：海青，用于前缘指示条 / 已选徽章
+    static let selectionAlt = adaptive(light: 0x06B6D4, dark: 0x22D3EE)
+    /// 选中色上的文字：亮外观填色深用白，暗外观填色浅用青墨
+    static let selectionInk = adaptive(light: 0xFFFFFF, dark: 0x0B3430)
+
+    /// 选中渐变（左上 → 右下），与品牌渐变同构
+    static var selectionGradient: LinearGradient {
+        LinearGradient(
+            colors: [selection, selectionAlt],
+            startPoint: .topLeading, endPoint: .bottomTrailing
+        )
+    }
+
     /// 危险色（清空 / 移除 / 失效提示；深色模式提亮）
     static let danger = adaptive(light: 0xE0455F, dark: 0xF06C83)
 

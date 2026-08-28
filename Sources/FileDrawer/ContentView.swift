@@ -524,10 +524,10 @@ private struct HeaderView: View {
                     .font(.system(size: 10, weight: .semibold, design: .monospaced))
                     .monospacedDigit()
                     .contentTransition(.numericText())
-                    .foregroundStyle(.white)
+                    .foregroundStyle(DrawerTheme.selectionInk)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
-                    .background(Capsule().fill(DrawerTheme.accentGradient))
+                    .background(Capsule().fill(DrawerTheme.selectionGradient))
                     .transition(.scale(scale: 0.6).combined(with: .opacity))
             }
 
@@ -681,6 +681,8 @@ private struct ItemRow: View {
     @ObservedObject private var settings = AppSettings.shared
     @Environment(\.colorScheme) private var colorScheme
     @State private var hovered = false
+    /// 手动双击判定：上次无修饰键单击的时刻；间隔内二击同一行 = 打开
+    @State private var lastRowClickAt: Date?
     /// 首屏错峰入场（从贴边侧滑入淡入）
     @State private var entered = false
     /// 刚拖入的新条目：行底扫过一道品牌色光
@@ -751,16 +753,6 @@ private struct ItemRow: View {
                     .allowsHitTesting(false)
             }
         }
-        // 选中指示条：前缘的品牌渐变小胶囊，随选中状态弹性伸缩
-        .overlay(alignment: .leading) {
-            Capsule()
-                .fill(DrawerTheme.accentGradient)
-                .frame(width: 3, height: isSelected ? (settings.compactRows ? 18 : 22) : 0)
-                .offset(x: 1.5)
-                .opacity(isSelected ? 1 : 0)
-                .animation(DrawerMotion.snap, value: isSelected)
-                .allowsHitTesting(false)
-        }
         // 悬停出现的排序把手：拖它调整顺序（拖出抽屉外仍是拷贝文件）。
         // 毛玻璃小芯片 + 微投影保证在任何缩略图/瓷片上都有对比度——
         // 裸图标贴着放大后的瓷片落影会被"吃掉"（实测被误读为遮挡）
@@ -819,8 +811,8 @@ private struct ItemRow: View {
         .overlay(
             RoundedRectangle(cornerRadius: rowRadius, style: .continuous)
                 .strokeBorder(
-                    isSelected ? DrawerTheme.accent.opacity(0.45) : .clear,
-                    lineWidth: 1.5
+                    isSelected ? DrawerTheme.selection.opacity(0.32) : .clear,
+                    lineWidth: 1
                 )
         )
         // 悬停浮起：柔和投影制造"离开列表平面"的层次
@@ -843,10 +835,9 @@ private struct ItemRow: View {
                 hovered = hovering
             }
         }
-        // 先注册双击（打开），再注册单击（选中）；SwiftUI 会优先匹配高次数手势。
-        .onTapGesture(count: 2) {
-            openItem()
-        }
+        // 手动双击判定（单击立即高亮）：不用 onTapGesture(count:2)+单击 叠加——
+        // 那套叠加里单击要等系统双击窗口超时（≈0.5s，随用户设置可到 1s）才确认触发，
+        // 选中高亮体感「点了一秒才亮」。改为单击先选中，间隔内再点同一行 = 打开。
         .onTapGesture {
             // ⌘/⇧ 点击 = 多选（访达语义）；普通单击在「直接打开」设置下立即打开
             let flags = NSEvent.modifierFlags.intersection(.deviceIndependentFlagsMask)
@@ -855,6 +846,16 @@ private struct ItemRow: View {
                 openItem()
                 return
             }
+            // 双击打开：修饰键多选点击不参与判定，避免 ⌘/⇧ 快速连点误触发打开
+            let isMultiselectClick = flags.contains(.command) || flags.contains(.shift)
+            if !isMultiselectClick,
+               let last = lastRowClickAt,
+               Date().timeIntervalSince(last) < NSEvent.doubleClickInterval {
+                lastRowClickAt = nil
+                openItem()
+                return
+            }
+            if !isMultiselectClick { lastRowClickAt = Date() }
             DrawerPanel.active?.makeKeyAndOrderFront(nil)
             withAnimation(.easeOut(duration: 0.15)) {
                 if flags.contains(.command) {
@@ -1182,9 +1183,28 @@ private struct ItemRow: View {
         }
     }
 
-    private var rowFill: Color {
-        if isSelected { return DrawerTheme.accent.opacity(hovered ? 0.14 : 0.10) }
-        return Color.primary.opacity(hovered ? 0.08 : 0.05)
+    /// 行底：选中 = 青釉罩染（前浓后淡的一层薄釉 + 发丝描边勾勒卡片轮廓，
+    /// 不另加指示条）；平时 = 中性微浮层。两侧都是同构渐变，切换可平滑插值。
+    private var rowFill: LinearGradient {
+        if isSelected {
+            return LinearGradient(
+                stops: [
+                    .init(color: DrawerTheme.selection.opacity(hovered ? 0.20 : 0.15), location: 0),
+                    .init(color: DrawerTheme.selection.opacity(hovered ? 0.13 : 0.10), location: 0.45),
+                    .init(color: DrawerTheme.selection.opacity(hovered ? 0.07 : 0.05), location: 1),
+                ],
+                startPoint: .leading, endPoint: .trailing
+            )
+        }
+        let tint = Color.primary.opacity(hovered ? 0.08 : 0.05)
+        return LinearGradient(
+            stops: [
+                .init(color: tint, location: 0),
+                .init(color: tint, location: 0.45),
+                .init(color: tint, location: 1),
+            ],
+            startPoint: .leading, endPoint: .trailing
+        )
     }
 
     /// 搜索命中时高亮名称中的匹配片段（kind: 语法只高亮名称关键字部分）
