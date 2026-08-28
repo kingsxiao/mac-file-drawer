@@ -60,18 +60,37 @@ final class SettingsWindowManager {
 // MARK: - 设置界面
 
 struct SettingsView: View {
+    @State private var selection = 0
+
     var body: some View {
-        TabView {
+        TabView(selection: instantSelection) {
             GeneralSettingsTab()
                 .tabItem { Label(L10n.t("通用"), systemImage: "gearshape") }
+                .tag(0)
             AppearanceSettingsTab()
                 .tabItem { Label(L10n.t("外观"), systemImage: "paintbrush") }
+                .tag(1)
             BehaviorSettingsTab()
                 .tabItem { Label(L10n.t("行为"), systemImage: "wand.and.stars") }
+                .tag(2)
             ShortcutSettingsTab()
                 .tabItem { Label(L10n.t("快捷键"), systemImage: "keyboard") }
+                .tag(3)
         }
         .frame(minWidth: 460, idealWidth: 480, minHeight: 400, idealHeight: 440)
+    }
+
+    /// tab 切换必须瞬时完成：macOS TabView 的 pane 隐式过渡会在新 pane 首次布局完成前
+    /// 就开始动画，grouped Form 的行与背景随后补算高度，肉眼可见的上下跳动。
+    private var instantSelection: Binding<Int> {
+        Binding(
+            get: { selection },
+            set: { newValue in
+                var transaction = Transaction()
+                transaction.disablesAnimations = true
+                withTransaction(transaction) { selection = newValue }
+            }
+        )
     }
 }
 

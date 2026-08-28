@@ -539,9 +539,8 @@ private struct HeaderView: View {
                     systemImage: "magnifyingglass",
                     tip: L10n.t("搜索（⌘F）"),
                     size: 25,
-                    tint: interaction.isSearchVisible ? DrawerTheme.accent : .secondary,
-                    activeTint: DrawerTheme.accent,
-                    activeFill: DrawerTheme.accent.opacity(0.12)
+                    // 搜索面板打开时常亮品牌色作状态标记；悬停反馈与其他图标一致（中性）
+                    tint: interaction.isSearchVisible ? DrawerTheme.accent : .secondary
                 ) {
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                         interaction.requestSearchFocus()
@@ -550,13 +549,7 @@ private struct HeaderView: View {
                 HoverCircleButton(systemImage: "gearshape", tip: L10n.t("设置（⌘,）"), size: 25) {
                     SettingsWindowManager.shared.show()
                 }
-                HoverCircleButton(
-                    systemImage: "arrow.right.to.line",
-                    tip: L10n.t("收起成边条"),
-                    size: 25,
-                    activeTint: DrawerTheme.accent,
-                    activeFill: DrawerTheme.accent.opacity(0.12)
-                ) {
+                HoverCircleButton(systemImage: "arrow.right.to.line", tip: L10n.t("收起成边条"), size: 25) {
                     NotificationCenter.default.post(name: .toggleDrawer, object: nil)
                 }
             }
