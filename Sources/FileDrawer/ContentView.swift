@@ -1321,16 +1321,22 @@ private struct CollapsedTabView: View {
                     .allowsHitTesting(false)
                 }
                 .overlay {
-                    // 鼠标悬停 / 拖拽悬停时的接收高亮
+                    // 拖拽悬停的接收罩染（鼠标悬停不罩染，保持材质干净）
                     tabShape
-                        .fill(DrawerTheme.accent.opacity(isDropTargeted ? 0.14 : hovered ? 0.08 : 0))
+                        .fill(DrawerTheme.accent.opacity(isDropTargeted ? 0.14 : 0))
                         .allowsHitTesting(false)
                 }
                 .overlay {
+                    // 拖拽悬停：实线接收描边
                     if isDropTargeted {
                         tabShape.strokeBorder(DrawerTheme.accent.opacity(0.7), lineWidth: 1.5)
                             .allowsHitTesting(false)
                     }
+                }
+                .overlay {
+                    // 鼠标悬停：品牌描边浮现，与点亮的把手相呼应
+                    tabShape.strokeBorder(DrawerTheme.accent.opacity(hovered ? 0.45 : 0), lineWidth: 1)
+                        .allowsHitTesting(false)
                 }
 
             VStack(spacing: 9) {
@@ -1345,12 +1351,28 @@ private struct CollapsedTabView: View {
                 }
             }
         }
-        // 悬停时从屏幕边缘轻轻探出，像被手指勾住往外拉
-        .offset(x: hovered ? (settings.edge == .right ? -3 : 3) : 0)
-        .scaleEffect(hovered ? 1.03 : 1)
+        // 悬停 = 从玻璃上揭起：外探行程加大 + 朝开口侧的接触投影；
+        // 不做整体缩放——细长边条一缩放就晃
+        .shadow(
+            color: .black.opacity(hovered ? 0.16 : 0),
+            radius: hovered ? 9 : 0,
+            x: hovered ? (settings.edge == .right ? -3 : 3) : 0,
+            y: 2
+        )
+        .offset(x: hovered ? (settings.edge == .right ? -5 : 5) : 0)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .contentShape(tabShape)
-        .iconHoverState($hovered, animation: .spring(response: 0.3, dampingFraction: 0.75))
+        .iconHoverState($hovered, animation: .spring(response: 0.35, dampingFraction: 0.6))
+        // 手型光标持续保障：面板为 key 窗口时，AppKit 会在每次 mouseMoved 按窗口
+        // cursor rect 把光标重置回箭头，onHover 只在进出时设置一次会被冲掉——
+        // 连续悬停在每次移动时重新按下手型，离开（.ended）时复原箭头
+        .onContinuousHover { phase in
+            switch phase {
+            case .active: NSCursor.pointingHand.set()
+            case .ended: NSCursor.arrow.set()
+            @unknown default: break
+            }
+        }
         .onTapGesture {
             DrawerPanel.active?.makeKeyAndOrderFront(nil)
             withAnimation(.spring(response: 0.42, dampingFraction: 0.9)) {
@@ -1364,33 +1386,48 @@ private struct CollapsedTabView: View {
         .accessibilityAddTraits(.isButton)
     }
 
-    /// 纸叠：顶层最新、完整清晰；下两层向抽屉里退、渐暗渐小，上缘从顶层后面露出。
-    /// 统一细描边 + 顶层投影，保证深层露出的边在毛玻璃上读得出来。
+    /// 纸叠：顶层是最新条目的内容瓷片；下两层是不透明的「纸卡」——
+    /// 实底 + 细描边、同尺寸不缩小，只露出上缘，像真实纸叠的纸边
+    /// （半透明缩小层在小尺寸下只会糊成一片灰影）。
+    /// 悬停时纸叠被「捏开」：层间距撑大、顶层多抬一点，纸堆张开成扇。
     private var peekStack: some View {
         ZStack {
             // 深层先画，顶层后画盖在上面
             ForEach(Array(peekItems.enumerated().reversed()), id: \.element.id) { index, item in
                 let depth = CGFloat(index)
-                FileTile(item: item, store: store, size: Self.tileSize)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: Self.tileSize * 0.27, style: .continuous)
-                            .strokeBorder(Color.primary.opacity(0.15), lineWidth: 0.6)
-                    )
-                    .scaleEffect(1 - depth * 0.09)
-                    .opacity(1 - depth * 0.22)
-                    .offset(y: -depth * 6)
-                    .shadow(
-                        color: .black.opacity(index == 0 ? 0.20 : 0.10),
-                        radius: 2.5, y: 1.5
-                    )
+                let spread: CGFloat = hovered ? 8 : 5
+                let hoverLift: CGFloat = hovered && index == 0 ? 2 : 0
+                Group {
+                    if index == 0 {
+                        FileTile(item: item, store: store, size: Self.tileSize)
+                    } else {
+                        paperCard
+                    }
+                }
+                .overlay(
+                    RoundedRectangle(cornerRadius: Self.tileSize * 0.27, style: .continuous)
+                        .strokeBorder(Color.primary.opacity(hovered ? 0.24 : 0.16), lineWidth: 0.6)
+                )
+                .offset(y: -depth * spread - hoverLift)
+                .shadow(
+                    color: .black.opacity(index == 0 ? (hovered ? 0.26 : 0.20) : 0.10),
+                    radius: hovered ? 3.5 : 2.5, y: 1.5
+                )
             }
         }
-        .offset(y: hovered ? -1.5 : 0)
     }
 
-    /// 把手：胶囊槽 + 指向屏幕中线的 chevron，悬停时外探，暗示「往中间拉开」
+    /// 纸卡：不透明的「一张纸」，只在层间露出边缘。
+    /// 必须定死尺寸：fill 形状会吞掉提议尺寸（整个边条宽 × 剩余高），把 VStack 撑散。
+    private var paperCard: some View {
+        RoundedRectangle(cornerRadius: Self.tileSize * 0.27, style: .continuous)
+            .fill(Color.primary.opacity(0.05))
+            .frame(width: Self.tileSize, height: Self.tileSize)
+    }
+
+    /// 把手：胶囊槽 + 指向屏幕中线的 chevron，悬停时外探并亮起胶囊底板，暗示「往中间拉开」
     private var pullHandle: some View {
-        VStack(spacing: 2) {
+        VStack(spacing: 3) {
             Capsule()
                 .fill(DrawerTheme.accentGradient)
                 .frame(width: hovered ? 14 : 10, height: 2.5)
@@ -1398,8 +1435,13 @@ private struct CollapsedTabView: View {
             Image(systemName: settings.edge == .right ? "chevron.compact.left" : "chevron.compact.right")
                 .font(.system(size: 12.5, weight: .semibold))
                 .foregroundStyle(DrawerTheme.accent.opacity(hovered ? 1 : 0.65))
-                .offset(x: hovered ? (settings.edge == .right ? -1.5 : 1.5) : 0)
+                .offset(x: hovered ? (settings.edge == .right ? -2.5 : 2.5) : 0)
         }
+        .padding(.vertical, 5)
+        .background(
+            // 悬停时亮起的拉手底板，与展开态抽屉拉手同一视觉语言
+            Capsule().fill(Color.primary.opacity(hovered ? 0.09 : 0))
+        )
     }
 
     /// 计数徽章：品牌渐变胶囊，与撤销 toast 的按钮同一视觉语言
