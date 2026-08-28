@@ -751,23 +751,6 @@ private struct ItemRow: View {
                     .allowsHitTesting(false)
             }
         }
-        // 悬停出现的排序把手：拖它调整顺序（拖出抽屉外仍是拷贝文件）
-        .overlay(alignment: .leading) {
-            Image(systemName: "line.3.horizontal")
-                .font(.system(size: 9, weight: .semibold))
-                .foregroundStyle(.secondary)
-                .frame(width: 13, height: 34)
-                .contentShape(Rectangle())
-                .opacity(hovered ? 1 : 0)
-                .allowsHitTesting(hovered)
-                .onDrag {
-                    let provider = item.dragProvider()
-                    ReorderDrag.register(provider, id: item.id)
-                    return provider
-                }
-                .help(L10n.t("拖动调整顺序（自动切入手动顺序；拖出抽屉外 = 拷贝文件）"))
-                .offset(x: -1)
-        }
         // 选中指示条：前缘的品牌渐变小胶囊，随选中状态弹性伸缩
         .overlay(alignment: .leading) {
             Capsule()
@@ -777,6 +760,44 @@ private struct ItemRow: View {
                 .opacity(isSelected ? 1 : 0)
                 .animation(DrawerMotion.snap, value: isSelected)
                 .allowsHitTesting(false)
+        }
+        // 悬停出现的排序把手：拖它调整顺序（拖出抽屉外仍是拷贝文件）。
+        // 毛玻璃小芯片 + 微投影保证在任何缩略图/瓷片上都有对比度——
+        // 裸图标贴着放大后的瓷片落影会被"吃掉"（实测被误读为遮挡）
+        .overlay(alignment: .leading) {
+            Image(systemName: "line.3.horizontal")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 16, height: settings.compactRows ? 30 : 38)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(.ultraThinMaterial)
+                        .overlay(
+                            Capsule(style: .continuous).strokeBorder(
+                                LinearGradient(
+                                    stops: [
+                                        .init(color: Color.white.opacity(colorScheme == .dark ? 0.22 : 0.55), location: 0),
+                                        .init(color: Color.white.opacity(0.06), location: 1),
+                                    ],
+                                    startPoint: .top, endPoint: .bottom
+                                ),
+                                lineWidth: 0.8
+                            )
+                        )
+                        .shadow(color: .black.opacity(0.14), radius: 2.5, y: 1)
+                )
+                .contentShape(Rectangle())
+                .opacity(hovered ? 1 : 0)
+                .scaleEffect(hovered ? 1 : 0.55)
+                .allowsHitTesting(hovered)
+                .animation(DrawerMotion.iconHover, value: hovered)
+                .onDrag {
+                    let provider = item.dragProvider()
+                    ReorderDrag.register(provider, id: item.id)
+                    return provider
+                }
+                .help(L10n.t("拖动调整顺序（自动切入手动顺序；拖出抽屉外 = 拷贝文件）"))
+                .padding(.leading, 2.5)
         }
         // 新条目：行底从左到右扫过一道品牌色光后淡出
         .overlay(
