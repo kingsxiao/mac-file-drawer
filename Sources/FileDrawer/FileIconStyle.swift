@@ -20,12 +20,54 @@ struct FileIconStyle: Equatable {
         self.badge = badge
     }
 
+    /// 符号渐变的明暗跨度：向白 / 向黑各混多少。
+    /// 足够小，保证渐变两端在瓷片底上仍接近 WCAG 3:1（契约测试对全部类型色对账）。
+    static let gradientToneSpread: Double = 0.10
+
     /// 瓷片符号色：在对应明暗模式的瓷片底色（类型色 20% 叠材质近似）上
     /// 保证 WCAG ≥3:1，不足时向白提亮（封顶 45%，保住色相）
     func symbolColor(dark: Bool) -> Color {
+        Color(hex: ensuredSymbolHex(dark: dark))
+    }
+
+    /// 对比度保障后的符号色（原始 hex）
+    func ensuredSymbolHex(dark: Bool) -> UInt32 {
         let base = TypeColorContrast.tileBase(colorHex: colorHex, dark: dark)
-        let ensured = TypeColorContrast.ensureContrast(symbol: colorHex, on: base)
-        return Color(hex: ensured.color)
+        return TypeColorContrast.ensureContrast(symbol: colorHex, on: base).color
+    }
+
+    /// 符号立体渐变的两端色（上亮下深；供测试对账）
+    func symbolGradientHexes(dark: Bool) -> (top: UInt32, bottom: UInt32) {
+        let base = ensuredSymbolHex(dark: dark)
+        let spread = Self.gradientToneSpread
+        return (
+            TypeColorContrast.lighten(base, mix: spread),
+            TypeColorContrast.darken(base, mix: spread)
+        )
+    }
+
+    /// 玻璃芯片符号的立体渐变：上亮下深，像 app 图标一样有体积感
+    func symbolGradient(dark: Bool) -> LinearGradient {
+        let (top, bottom) = symbolGradientHexes(dark: dark)
+        return LinearGradient(
+            stops: [
+                .init(color: Color(hex: top), location: 0),
+                .init(color: Color(hex: bottom), location: 1),
+            ],
+            startPoint: .top, endPoint: .bottom
+        )
+    }
+
+    /// 瓷片底：同系对角渐变，三段比双段更饱满；透明度让明暗模式共用一套色值
+    var tileFill: LinearGradient {
+        LinearGradient(
+            stops: [
+                .init(color: color.opacity(0.40), location: 0),
+                .init(color: color.opacity(0.26), location: 0.55),
+                .init(color: color.opacity(0.15), location: 1),
+            ],
+            startPoint: .topLeading, endPoint: .bottomTrailing
+        )
     }
 }
 
@@ -170,11 +212,12 @@ enum FileTypeCatalog {
                 "lz", "lz4", "lzma", "zst", "cab", "arj", "lha"],
                entry(.archive, "doc.zipper", 0xA76B1F)),
         family(["dmg", "iso", "img", "cdr", "sparseimage", "sparsebundle"],
-               entry(.archive, "opticaldiscdrive", 0x98A0A8)),
+               entry(.archive, "opticaldiscdrive.fill", 0x98A0A8)),
 
         // —— 字体
+        // 不用 textformat 系：中文环境会被本地化成「格式 / 大小」，小尺寸发糊且语义偏差
         family(["ttf", "otf", "ttc", "woff", "woff2", "eot"],
-               entry(.font, "textformat", 0x6C5CE7)),
+               entry(.font, "abc", 0x6C5CE7)),
 
         // —— 代码：逐语言品牌色 + 扩展名角标
         family(["swift"], entry(.code, "bird.fill", 0xF05138)),

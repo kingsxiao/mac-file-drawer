@@ -74,6 +74,26 @@ final class TileContrastTests: XCTestCase {
         XCTAssertEqual(TypeColorContrast.darken(0xFFFFFF, mix: 0.5), 0x808080)
     }
 
+    /// 符号立体渐变的两端色（上亮下深）：在明暗两模式的瓷片底上都不得跌破可读下限。
+    /// 渐变让符号有体积感，但跨度受 FileIconStyle.gradientToneSpread 约束，
+    /// 最亮端（通常在对比度不利方向）也要保有大部分对比度。
+    func testSymbolGradientEndpointsStayNearThreshold() {
+        var failures: [String] = []
+        for (name, style) in FileTypeCatalog.allStyles {
+            for dark in [false, true] {
+                let base = TypeColorContrast.tileBase(colorHex: style.colorHex, dark: dark)
+                let (top, bottom) = style.symbolGradientHexes(dark: dark)
+                let topRatio = TypeColorContrast.contrastRatio(top, base)
+                let bottomRatio = TypeColorContrast.contrastRatio(bottom, base)
+                let floor = TypeColorContrast.gradientEndpointFloor
+                if topRatio < floor - 0.001 || bottomRatio < floor - 0.001 {
+                    failures.append("\(name) dark=\(dark) top=\(String(format: "%.2f", topRatio)) bottom=\(String(format: "%.2f", bottomRatio))")
+                }
+            }
+        }
+        XCTAssertTrue(failures.isEmpty, "渐变端点未达下限的类型色：\n\(failures.joined(separator: "\n"))")
+    }
+
     /// 预览样本：去重保序、两组比值均达标（设置面板展示与该函数同源）
     func testPreviewSamplesDedupedAndCompliant() {
         let hexes: [UInt32] = [0x6C5CE7, 0x6C5CE7, 0x2FA252, 0xE0455F]

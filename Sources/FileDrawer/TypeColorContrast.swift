@@ -14,6 +14,9 @@ enum TypeColorContrast {
     static let threshold: Double = 3.0
     /// 提亮时向白混合的上限（再高就近似无色相了）
     static let maxLightenMix: Double = 0.45
+    /// 符号立体渐变端点（上亮下深后最不利的一端）的对比度下限：
+    /// 低于门槛但保有大部分对比度，渐变的平均色仍由 threshold 保障
+    static let gradientEndpointFloor: Double = 2.4
     /// 浅色模式典型瓷片底色（材质近似）
     static let lightBase: UInt32 = 0xF0F0F2
     /// 深色模式典型瓷片底色（材质近似）

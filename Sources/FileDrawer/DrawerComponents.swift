@@ -450,63 +450,87 @@ struct FileTile: View {
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
+        // 与类型瓷片同一道内缘高光，让两种瓷片属于同一套视觉语言
         .overlay(
             RoundedRectangle(cornerRadius: radius, style: .continuous)
-                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
+                .strokeBorder(
+                    LinearGradient(
+                        stops: [
+                            .init(color: Color.white.opacity(0.50), location: 0),
+                            .init(color: Color.white.opacity(0.05), location: 0.62),
+                        ],
+                        startPoint: .top, endPoint: .bottom
+                    ),
+                    lineWidth: max(0.5, size * 0.022)
+                )
+        )
+        .shadow(
+            color: Color.black.opacity(colorScheme == .dark ? 0.38 : 0.20),
+            radius: size * 0.12, y: size * 0.07
         )
     }
 
     private func glyphTile(radius: CGFloat) -> some View {
         let style = item.kind.style
-        // 小尺寸（预览弹层头部 20pt）放不下角标，只在行内 38pt 瓷片上显示
+        let dark = colorScheme == .dark
+        // 小尺寸（预览弹层头部 20pt）放不下角标，只在行内 30/38pt 瓷片上显示
         let badge = size >= 30 ? style.badge : nil
-        let iconSize = size * (badge == nil ? 0.42 : 0.34)
+        let iconSize = size * (badge == nil ? 0.46 : 0.37)
 
         return ZStack {
-            // 同系渐变底：左上亮右下暗；透明度让明暗模式共用一套色值
+            // 同系渐变底：对角三段比纯 tint 更饱满；透明度让明暗模式共用一套色值
+            RoundedRectangle(cornerRadius: radius, style: .continuous)
+                .fill(style.tileFill)
+
+            // 左上柔光：像环境光落在玻璃芯片上
             RoundedRectangle(cornerRadius: radius, style: .continuous)
                 .fill(
-                    LinearGradient(
-                        stops: [
-                            .init(color: style.color.opacity(0.30), location: 0),
-                            .init(color: style.color.opacity(0.13), location: 1),
-                        ],
-                        startPoint: .topLeading, endPoint: .bottomTrailing
+                    RadialGradient(
+                        colors: [Color.white.opacity(0.26), Color.white.opacity(0)],
+                        center: UnitPoint(x: 0.24, y: 0.10),
+                        startRadius: 0,
+                        endRadius: size * 1.15
                     )
                 )
 
-            // 顶部微光，加一点玻璃质感
-            RoundedRectangle(cornerRadius: radius, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        stops: [
-                            .init(color: Color.white.opacity(0.20), location: 0),
-                            .init(color: Color.white.opacity(0), location: 0.55),
-                        ],
-                        startPoint: .top, endPoint: .bottom
-                    )
-                )
-
-            VStack(spacing: size * 0.05) {
+            VStack(spacing: size * 0.045) {
                 Image(systemName: style.symbolName)
-                    .font(.system(size: iconSize, weight: .medium))
+                    .font(.system(size: iconSize, weight: .semibold))
                     .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(effectiveSymbolColor)
+                    .foregroundStyle(style.symbolGradient(dark: dark))
+                    .shadow(
+                        color: style.color.opacity(dark ? 0.45 : 0.35),
+                        radius: size * 0.05, y: size * 0.04
+                    )
 
                 if let badge {
                     Text(badge)
-                        .font(.system(size: max(6, size * 0.17), weight: .semibold, design: .monospaced))
+                        .font(.system(size: max(6, size * 0.16), weight: .semibold, design: .monospaced))
                         .foregroundStyle(effectiveSymbolColor)
-                        .padding(.horizontal, size * 0.055)
-                        .padding(.vertical, size * 0.018)
-                        .background(Capsule().fill(style.color.opacity(0.13)))
-                        .overlay(Capsule().strokeBorder(effectiveSymbolColor.opacity(0.25), lineWidth: 0.5))
+                        .padding(.horizontal, size * 0.07)
+                        .padding(.vertical, size * 0.022)
+                        .background(Capsule().fill(style.color.opacity(0.15)))
                 }
             }
         }
+        // 内缘高光：上亮下隐的白描边，玻璃边感（替代旧的同色描边，去线框味）
         .overlay(
             RoundedRectangle(cornerRadius: radius, style: .continuous)
-                .strokeBorder(style.color.opacity(0.22), lineWidth: 0.7)
+                .strokeBorder(
+                    LinearGradient(
+                        stops: [
+                            .init(color: Color.white.opacity(dark ? 0.42 : 0.55), location: 0),
+                            .init(color: Color.white.opacity(0.05), location: 0.62),
+                        ],
+                        startPoint: .top, endPoint: .bottom
+                    ),
+                    lineWidth: max(0.5, size * 0.022)
+                )
+        )
+        // 落影：同色柔影让瓷片轻轻浮在毛玻璃上
+        .shadow(
+            color: style.color.opacity(dark ? 0.34 : 0.28),
+            radius: size * 0.12, y: size * 0.07
         )
     }
 }
