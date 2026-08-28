@@ -338,7 +338,7 @@ struct ContentView: View {
     private func itemList(_ items: [ShelfItem]) -> some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(spacing: settings.compactRows ? 4 : 6) {
+                LazyVStack(spacing: settings.compactRows ? 5 : 7) {
                     ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                         ItemRow(
                             item: item,
@@ -685,6 +685,7 @@ private struct ItemRow: View {
     /// 是否处于抽屉展开后的入场窗口（仅此时错峰滑入）
     var staggerEntrance: Bool = false
     @ObservedObject private var settings = AppSettings.shared
+    @Environment(\.colorScheme) private var colorScheme
     @State private var hovered = false
     /// 首屏错峰入场（从贴边侧滑入淡入）
     @State private var entered = false
@@ -700,10 +701,10 @@ private struct ItemRow: View {
     }
 
     var body: some View {
-        HStack(spacing: settings.compactRows ? 8 : 10) {
+        HStack(spacing: settings.compactRows ? 9 : 12) {
             tileWithOverlays
 
-            VStack(alignment: .leading, spacing: settings.compactRows ? 1.5 : 2.5) {
+            VStack(alignment: .leading, spacing: settings.compactRows ? 2 : 3.5) {
                 nameRow
                 metaRow
             }
@@ -724,11 +725,26 @@ private struct ItemRow: View {
             .opacity(hovered ? 1 : 0)
             .accessibilityHidden(!hovered) // 不可见时不可聚焦；等价操作经右键菜单/键盘可达
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, settings.compactRows ? 5.5 : 9)
+        .padding(.horizontal, 12)
+        .padding(.vertical, settings.compactRows ? 6 : 10.5)
         .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
+            RoundedRectangle(cornerRadius: rowRadius, style: .continuous)
                 .fill(rowFill)
+        )
+        // 行卡片顶缘高光：与瓷片同一道玻璃语言，让行读作"浮在毛玻璃上的小卡"
+        .overlay(
+            RoundedRectangle(cornerRadius: rowRadius, style: .continuous)
+                .strokeBorder(
+                    LinearGradient(
+                        stops: [
+                            .init(color: Color.white.opacity(colorScheme == .dark ? 0.13 : 0.32), location: 0),
+                            .init(color: Color.white.opacity(0.03), location: 0.55),
+                            .init(color: Color.white.opacity(0), location: 1),
+                        ],
+                        startPoint: .top, endPoint: .bottom
+                    )
+                )
+                .allowsHitTesting(false)
         )
         // 行内排序插入指示条：拖拽悬停到本行上方时亮起
         .overlay(alignment: .top) {
@@ -762,7 +778,7 @@ private struct ItemRow: View {
         .overlay(alignment: .leading) {
             Capsule()
                 .fill(DrawerTheme.accentGradient)
-                .frame(width: 3, height: isSelected ? (settings.compactRows ? 16 : 20) : 0)
+                .frame(width: 3, height: isSelected ? (settings.compactRows ? 18 : 22) : 0)
                 .offset(x: 1.5)
                 .opacity(isSelected ? 1 : 0)
                 .animation(DrawerMotion.snap, value: isSelected)
@@ -770,7 +786,7 @@ private struct ItemRow: View {
         }
         // 新条目：行底从左到右扫过一道品牌色光后淡出
         .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
+            RoundedRectangle(cornerRadius: rowRadius, style: .continuous)
                 .fill(
                     LinearGradient(
                         stops: [
@@ -786,7 +802,7 @@ private struct ItemRow: View {
                 .allowsHitTesting(false)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
+            RoundedRectangle(cornerRadius: rowRadius, style: .continuous)
                 .strokeBorder(
                     isSelected ? DrawerTheme.accent.opacity(0.45) : .clear,
                     lineWidth: 1.5
@@ -802,7 +818,7 @@ private struct ItemRow: View {
         .opacity(entered ? (isMissing ? 0.55 : 1) : 0)
         .offset(x: entered ? 0 : (settings.edge == .right ? 18 : -18))
         .animation(.easeOut(duration: 0.3), value: isMissing)
-        .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: rowRadius, style: .continuous))
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityDescription)
         .accessibilityHint(settings.openOnSingleClick ? L10n.t("双击打开文件") : L10n.t("单击选中，双击打开文件"))
@@ -886,7 +902,10 @@ private struct ItemRow: View {
         }
     }
 
-    private var tileSize: CGFloat { settings.compactRows ? 30 : 38 }
+    private var tileSize: CGFloat { settings.compactRows ? 32 : 42 }
+
+    /// 行卡片圆角：随密度模式缩放，与更宽敞的行内边距配套
+    private var rowRadius: CGFloat { settings.compactRows ? 11 : 13 }
 
     /// 瓷片 + 置顶角标 + 多选拖拽把手层
     private var tileWithOverlays: some View {
@@ -972,10 +991,10 @@ private struct ItemRow: View {
     private var metaRow: some View {
         if isMissing || !metaLine.isEmpty || isContentMatch {
             Text(displayMeta)
-                .font(.system(size: settings.compactRows ? 10.5 : 11))
+                .font(.system(size: settings.compactRows ? 10.5 : 11.5))
                 .foregroundStyle(isMissing
-                                 ? AnyShapeStyle(DrawerTheme.danger.opacity(0.75))
-                                 : AnyShapeStyle(.tertiary))
+                                 ? AnyShapeStyle(DrawerTheme.danger.opacity(0.8))
+                                 : AnyShapeStyle(.secondary))
                 .lineLimit(1)
                 .truncationMode(.tail)
         }
@@ -1149,8 +1168,8 @@ private struct ItemRow: View {
     }
 
     private var rowFill: Color {
-        if isSelected { return DrawerTheme.accent.opacity(hovered ? 0.13 : 0.09) }
-        return Color.primary.opacity(hovered ? 0.08 : 0.04)
+        if isSelected { return DrawerTheme.accent.opacity(hovered ? 0.14 : 0.10) }
+        return Color.primary.opacity(hovered ? 0.08 : 0.05)
     }
 
     /// 搜索命中时高亮名称中的匹配片段（kind: 语法只高亮名称关键字部分）
@@ -1162,12 +1181,12 @@ private struct ItemRow: View {
 
         if keywords.isEmpty {
             Text(item.name)
-                .font(.system(size: 13, weight: .medium))
+                .font(.system(size: 13, weight: .semibold))
                 .lineLimit(1)
                 .truncationMode(.middle)
         } else {
             Text(Self.highlighted(item.name, keywords: keywords))
-                .font(.system(size: 13, weight: .medium))
+                .font(.system(size: 13, weight: .semibold))
                 .lineLimit(1)
                 .truncationMode(.middle)
         }
