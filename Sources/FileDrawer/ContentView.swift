@@ -1518,20 +1518,27 @@ enum SearchNameHighlight {
     private static let accent = DrawerTheme.accentNSColor
 
     static func attributed(_ text: String, keywords: [String], fontSize: CGFloat) -> AttributedString {
-        var attributed = AttributedString(text)
-        let lowerText = text.lowercased()
-        for keyword in keywords {
-            let lowerQuery = keyword.lowercased()
-            var searchStart = lowerText.startIndex
-            while let range = lowerText.range(of: lowerQuery, range: searchStart..<lowerText.endIndex) {
-                if let attr = Range(range, in: attributed) {
-                    attributed[attr].appKit.foregroundColor = accent
-                    attributed[attr].appKit.font = .boldSystemFont(ofSize: fontSize)
-                }
-                searchStart = range.upperBound
+        // NSFont 的 Sendable 一致性被 SDK 显式标记为不可用，直接向 AttributedString 的
+        // appKit scope 赋 font 会触发「conformance unavailable」警告（零警告门禁拦截）；
+        // 改为先在 NSMutableAttributedString 上布置 run 属性再整体桥接——导入路径
+        // 不经过 Sendable 检查，appKit scope 的前景色/字体原样带入，渲染路径不变
+        // （契约由 SearchHighlightTests 锁定）。
+        let ns = NSMutableAttributedString(string: text)
+        let nsText = text as NSString
+        let highlight: [NSAttributedString.Key: Any] = [
+            .foregroundColor: accent,
+            .font: NSFont.boldSystemFont(ofSize: fontSize),
+        ]
+        for keyword in keywords where !keyword.isEmpty {
+            var searchRange = NSRange(location: 0, length: nsText.length)
+            while true {
+                let hit = nsText.range(of: keyword, options: .caseInsensitive, range: searchRange)
+                if hit.location == NSNotFound { break }
+                ns.setAttributes(highlight, range: hit)
+                searchRange = NSRange(location: NSMaxRange(hit), length: nsText.length - NSMaxRange(hit))
             }
         }
-        return attributed
+        return AttributedString(ns)
     }
 }
 
