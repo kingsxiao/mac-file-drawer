@@ -14,11 +14,6 @@
 
 ## 界面预览
 
-<p align="center">
-  <img src="docs/screenshots/light.png" width="390" alt="File Drawer 展开态：分组徽章、置顶图钉、真实缩略图与着色瓷片">
-</p>
-<p align="center"><sub>展开的抽屉：头部分组切换与计数 · 置顶区（图钉角标）· 图片 / 视频 / PDF 真实缩略图 · 其余类型着色瓷片</sub></p>
-
 <table>
   <tr>
     <td align="center">
