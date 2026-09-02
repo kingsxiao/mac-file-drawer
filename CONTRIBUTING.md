@@ -18,7 +18,7 @@ make dmg         # 分发用 DMG
 make help        # 全部目标
 ```
 
-调试用技巧（裸进程隔离、测试数据注入）见仓库内 `scripts/smoke_automation.sh` 与 README「项目结构」。
+调试用技巧（裸进程隔离、测试数据注入）见仓库内 `scripts/smoke_automation.sh` 与 README.zh-CN「项目结构」。
 
 ## 项目约定
 

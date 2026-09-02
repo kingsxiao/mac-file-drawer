@@ -112,7 +112,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 </plist>
 PLIST
 
-# 签名：默认 ad-hoc（"- "，无 Developer ID，Gatekeeper 首启会拦，见 README「分发与公证就绪」）；
+# 签名：默认 ad-hoc（"- "，无 Developer ID，Gatekeeper 首启会拦，见 README.zh-CN「分发与公证就绪」）；
 # 设 SIGN_IDENTITY 环境变量（如 "Developer ID Application: 名字 (TeamID)"）走正式签名 + Hardened Runtime
 SIGN_IDENTITY="${SIGN_IDENTITY:--}"
 if [[ "$SIGN_IDENTITY" == "-" ]]; then

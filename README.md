@@ -1,384 +1,408 @@
-# 文件抽屉 · macOS File Drawer
+# FileDrawer · A File Drawer for macOS
 
 [![CI](https://github.com/kingsxiao/mac-file-drawer/actions/workflows/ci.yml/badge.svg)](https://github.com/kingsxiao/mac-file-drawer/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/kingsxiao/mac-file-drawer?include_prereleases&label=%E6%9C%80%E6%96%B0%E7%89%88)](https://github.com/kingsxiao/mac-file-drawer/releases)
+[![Release](https://img.shields.io/github/v/release/kingsxiao/mac-file-drawer?include_prereleases&label=latest)](https://github.com/kingsxiao/mac-file-drawer/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Platform](https://img.shields.io/badge/macOS-14%2B-black)
 ![Swift](https://img.shields.io/badge/Swift-5.9-orange)
 
-一款极简的 macOS 桌面工具：启动后，屏幕右侧滑出一个半透明「抽屉」，可以把文件/文件夹随手放进去暂存，需要时再拖出来继续使用。
+**English** | [简体中文](README.zh-CN.md)
 
-用 **Swift + AppKit(NSPanel) + SwiftUI** 实现，无任何第三方依赖。
+FileDrawer is a minimal macOS utility: a translucent **drawer** that slides out from the edge of your screen. Stash files & folders at hand while you work, drag them out when you need them — like Yoink or Dropover, but **native, free, and open source**.
 
-> **English**: File Drawer is a minimal macOS utility — a translucent drawer that slides out from the screen edge, so you can stash files & folders at hand and drag them out when needed. Swift + AppKit + SwiftUI, zero third-party dependencies. Full documentation below is in Chinese.
+Built with **Swift + AppKit (NSPanel) + SwiftUI**, zero third-party dependencies.
 
-## 界面预览
+## Screenshots
 
 <table>
   <tr>
     <td align="center">
-      <img src="docs/screenshots/search.png" width="330" alt="搜索 kind:图片 类型过滤"><br>
-      <sub>搜索 <code>kind:图片</code>：类型语法过滤<br>＋ 青瓷 <code>2/10</code> 匹配计数</sub>
+      <img src="docs/screenshots/search.png" width="330" alt="Search with kind:image type filter"><br>
+      <sub>Search <code>kind:image</code>: type-syntax filtering<br>＋ celadon <code>2/10</code> match counter</sub>
     </td>
     <td align="center">
-      <img src="docs/screenshots/dark.png" width="330" alt="深色外观"><br>
-      <sub>深色外观：玻璃与品牌色<br>整体自适应提亮一档</sub>
+      <img src="docs/screenshots/dark.png" width="330" alt="Dark appearance"><br>
+      <sub>Dark appearance: glass & brand color<br>brightened for readability</sub>
     </td>
     <td align="center">
-      <img src="docs/screenshots/collapsed-chip.png" width="120" alt="收起成悬浮芯片"><br>
-      <sub>收起成贴边悬浮芯片：<br>最新缩略图 ＋ 计数 ＋ 呼吸点</sub>
+      <img src="docs/screenshots/collapsed-chip.png" width="120" alt="Collapsed into a floating chip"><br>
+      <sub>Collapse into an edge chip:<br>latest thumbnail ＋ count ＋ pulse dot</sub>
     </td>
   </tr>
 </table>
 
-## 下载安装
+## Install
 
-从 [**Releases**](https://github.com/kingsxiao/mac-file-drawer/releases) 下载 DMG
-（universal，Apple Silicon / Intel 通用；附 `SHA256SUMS.txt` 可校验完整性），
-挂载后把 **FileDrawer 拖进 Applications** 即可。当前为 ad-hoc 签名，首次打开会被
-Gatekeeper 拦截：在访达里**右键 → 打开**放行（详见[「分发与公证就绪」](#分发与公证就绪)）。
+Download the DMG from [**Releases**](https://github.com/kingsxiao/mac-file-drawer/releases)
+(universal binary, Apple Silicon / Intel; `SHA256SUMS.txt` included), mount it and
+**drag FileDrawer into Applications**. The app is currently **ad-hoc signed**: the
+first launch is blocked by Gatekeeper — **right-click → Open** to allow it
+(see [Distribution & notarization readiness](#distribution--notarization-readiness)).
 
-喜欢源码方式：`git clone` 后 `make install` 一键构建安装，或 `make dmg` 自行出包，
-见[参与贡献](CONTRIBUTING.md)。
+Prefer building from source: `git clone`, then `make install` (one-shot build & install)
+or `make dmg` to roll your own DMG — see [Contributing](CONTRIBUTING.md).
 
-## 功能
+## Features
 
-- 🗂 **拖入暂存**：从访达（或其它应用）把文件、文件夹拖到抽屉里；支持一次多选拖入。
-- 🗃 **多抽屉分组**：头部点分组名即可切换 / 新建 / 重命名 / 删除分组（各分组带计数徽章）；
-  拖入、粘贴、⌘V 放进的都是**当前分组**；右键「移动到分组」把条目（含整批多选）挪去别的分组；
-  **⌘1–⌘9 快速切组**；**每个分组各自记忆排序方式**（设置里的「默认排序」只管未单独设置的分组）；
-  「清空」「导出」按分组作用域；旧版本数据升级后自动归入「默认」分组。
-- ✍️ **文本 / 链接也能拖入**：从任意应用拖一段文字或链接到抽屉，自动物化成收件箱里的
-  真实文件（文本 → `.txt`、链接 → `.webloc` 网页快捷方式），之后拖出、预览、双击打开
-  一切照旧；条目移除且撤销窗口关闭后自动回收底层文件。**⌘V 粘贴**同样支持，
-  富文本（RTF，如从 Word / 网页拷贝）会自动转成纯文本物化。
-- ✋ **拖出取回**：按住条目往抽屉外拖即可——落到 Finder 是拷贝真实文件，放到邮件、聊天窗口等也认。
-- 🖱 **多选批量**：**⌘点击**逐个勾选、**⇧点击**选区间、**⌘A** 全选；
-  Delete / ⌘C / ⏎ / 右键菜单全部按访达语义作用于整批，批量移除同样可一键「还原」；
-  **多选时拖动瓷片可把整批文件一次拖出**（×N 角标预览，落到访达 / 邮件即多文件拷贝）。
-- 📌 **置顶与手动排序**：右键「置顶」把常用条目钉在最前（品牌色图钉角标），
-  且**免于过期清理与容量淘汰**；「调整顺序 → 上移 / 下移 / 移到最前 / 移到最后」
-  自动切入手动顺序模式（键盘 **⌘↑ / ⌘↓** 平移）。
-- ✏️ **重命名**：右键「重命名…」同目录改名（同名自动追加序号，类型随新扩展名重识别）。
-- 🩺 **失效检测**：启动 / 展开 / 列表变化时后台扫描文件存在性，失效条目降透明 +
-  红色「文件已不存在」提示，打开自动拦截；设置里可一键清理。
-- 📂 **打开方式**：右键「打开方式」子菜单列出所有能打开该文件的应用（默认应用排最前）。
-- 🍃 **菜单栏快速访问**：托盘菜单含「最近条目」（最近 6 个，点击直接打开）、
-  「导出全部到文件夹…」（批量拷贝、同名自动序号、失效跳过）、
-  「打开收件箱文件夹」（拖入文本/链接物化文件的所在目录，可直接在访达/Spotlight 检索）。
-- 📋 **剪贴板互通**：**⌘C** 把选中条目按「访达拷贝」语义写入剪贴板（任何应用可粘贴，多选拷多个）；
-  **⌘V** 把剪贴板里的文件放入抽屉，剪贴板是文本 / 链接时直接物化成条目；右键菜单含「拷贝文件」。
-- ↩️ **移除可还原**：移除 / 清空 / 清理失效条目后底部弹出提示条，点「还原」按原位置放回，
-  超时自动收起；容量淘汰等策略清理保持静默（不打扰）；拖入重复文件会有「已跳过 N 个重复」轻提示。
-- 👁 **空格快速预览**：单击条目选中后按 **空格**，抽屉内弹出原生 QuickLook 卡片——
-  视频直接播放、PDF 可翻页、图片支持缩放；**↑↓ / ←→** 实时切换、**⏎** 打开、**Esc** 关闭。
-- 🔍 **搜索与排序**：点放大镜或 **⌘F** 呼出搜索胶囊（再点一次放大镜或按 Esc 收起），
-  边输边滤、命中片段高亮、组名旁实时显示青瓷 `匹配/总数` 计数，多关键字取交集；
-  支持 **`kind:图片`** 类型语法（`kind:视频`、`kind:code`、`kind:pdf`…，
-  中英文别名均可，多个 kind 取并集）；名称没命中时用 **Spotlight 检索文件内容**
-  补充结果（标注「内容匹配」，可在设置关闭）；排序支持「最近加入 / 最早加入 /
-  名称 A–Z / 类型分组 / 手动顺序」，每组各自记忆，排序按钮图标即当前模式。
-- 🚪 **收起成悬浮芯片**：点拉手把抽屉缩成贴屏幕边缘的玻璃「悬浮芯片」（最新一张缩略瓷片 ＋ 等宽计数徽章 ＋ 品牌色呼吸点），
-  点击展开；直接把文件拖到芯片上会自动展开接住。菜单栏菜单同样可切换。
-- ⚡️ **启动即滑入**：应用启动后抽屉从屏幕右缘平滑抽出（非激活面板，不抢当前焦点）。
-- ⚡ **缩略图磁盘缓存**：图片 / 视频 / PDF 缩略图按「路径 + 修改时间 + 大小」指纹落盘缓存，
-  重启不再重复解码（视频抽帧尤其受益），文件被替换后指纹变化自动失效。
-- 🔒 **不打扰**：浮动于普通窗口之上、全空间可见，但点击它不会激活前台应用。
-- 👆 **快捷操作**：双击打开文件（可在设置改为单击打开）；悬停行出现「在访达中显示 / 另存为 / 移除」；
-  右键菜单含「拷贝文件」「拷贝路径」「移动到文件夹…」「重命名…」「打开方式」等全部操作；
-  导入文件走菜单栏或主菜单（⌘O）。
-- ⌫ **键盘移除**：Delete 键移除选中条目（多选时整批移除）。
-- 💾 **自动记忆**：条目列表（含置顶态与手动顺序）与排序偏好持久化到 UserDefaults，
-  重启原样恢复（已删除的源文件自动清理）。
-- 🧹 **暂存维护**：可配置过期自动清理（1/7/30 天）与容量上限（20/50/100 条，超出淘汰最早加入，
-  置顶条目豁免），**每个分组可单独设置容量上限**（设置 → 通用 → 分组容量上限，未设置的跟随全局）；
-  调整后立即对现有条目生效，启动时也会按策略收敛；设置里可一键清理失效条目。
-- 🍃 **菜单栏图标**：托盘图标菜单提供 显示/隐藏抽屉、导入、导出全部、最近条目、清空、设置、关于、退出。
-- 🚀 **登录启动 & Dock 图标**：设置里一键「登录 macOS 后自动启动」（SMAppService，
-  与系统设置登录项实时同步）；可关闭 Dock 图标只保留菜单栏形态，随时恢复。
-- ⚙️ **设置面板**：点头部齿轮、菜单栏「设置…」或按 **⌘,** 打开，四组配置即时生效：
-  - **通用**：启动时展开/收起、登录时自动启动、启动时是否清理已不存在的文件、默认排序、
-    单击直接打开、自动清理过期条目、容量上限、当前条目数与一键清理；
-  - **外观**：浅色/深色/跟随系统、抽屉宽度（280–420pt）、占屏高度比例、垂直停靠位置、
-    停靠边缘（左/右）、展开时停靠到鼠标所在屏幕（多显示器）、毛玻璃浓度（超薄/薄/厚/超厚）、
-    紧凑列表、显示大小/时间/缩略图；
-  - **行为**：拖文件到边条上自动展开、拖出文件后自动收起、清空后自动收起、
-    切换到其他应用时自动收起、面板层级（浮动/普通）、Dock 图标开关；
-  - **快捷键**：全局热键（Carbon RegisterEventHotKey），任意应用前台时展开/收起抽屉，
-    默认 ⌥Space，点按键框录制新组合（必须含 ⌘/⌥/⌃ 修饰键）。
+- 🗂 **Drag in to stash**: drop files & folders from Finder (or any app) into the drawer; multi-select drops supported.
+- 🗃 **Multiple drawer groups**: click the group name in the header to switch / create / rename / delete groups
+  (each with a count badge); drops, pastes and ⌘V all land in the **current group**; right-click
+  "Move to group" relocates items (whole multi-selection batches included); **⌘1–⌘9 jump between groups**;
+  **each group remembers its own sort order** (the "default sort" setting only applies to groups without one);
+  "Clear" and "Export" are group-scoped; data from older versions migrates into the "Default" group.
+- ✍️ **Text & links too**: drag a text selection or a link from any app into the drawer and it materializes
+  into a real file in an inbox folder (text → `.txt`, link → `.webloc`); drag out, preview and double-click
+  behave exactly like regular files; underlying files are reclaimed after the item is removed and the undo
+  window closes. **⌘V paste** works the same, with rich text (RTF from Word / browsers) auto-flattened to plain text.
+- ✋ **Drag out to retrieve**: drag an item out of the drawer — dropping on Finder copies the real file;
+  mail clients, chat windows and everything else accept it too.
+- 🖱 **Multi-select batches**: **⌘-click** to toggle items, **⇧-click** for ranges, **⌘A** to select all;
+  Delete / ⌘C / ⏎ / context menus act on the whole batch Finder-style, batch removals are undoable;
+  **drag a tile while multiple items are selected to drag them all out at once** (×N badge preview,
+  dropped as a multi-file copy).
+- 📌 **Pin & manual ordering**: right-click "Pin" keeps frequent items on top (brand-color pin badge) and
+  **exempts them from expiry cleanup and capacity eviction**; "Rearrange → Move up / down / to front / to back"
+  switches the group to manual ordering (⌘↑ / ⌘↓ nudge the selection).
+- ✏️ **Rename**: right-click "Rename…" renames in place (name collisions get a numeric suffix, type is
+  re-detected from the new extension).
+- 🩺 **Stale-item detection**: background existence scans on launch / expand / list changes; stale items dim
+  with a red "file no longer exists" hint and opening is blocked; one-click cleanup in Settings.
+- 📂 **Open With**: right-click "Open With" submenu lists every app that can open the file (default app first).
+- 🍃 **Menu-bar quick access**: tray menu includes "Recent items" (latest 6, click to open),
+  "Export all to folder…" (batch copy, collision suffixes, stale skipped) and
+  "Open inbox folder" (where dragged text/links materialize — searchable in Finder/Spotlight).
+- 📋 **Clipboard interop**: **⌘C** puts selected items on the clipboard Finder-style (paste anywhere,
+  multi-select copies multiple files); **⌘V** pulls files from the clipboard into the drawer, and
+  text/link clipboards materialize into items; context menu offers "Copy file".
+- ↩️ **Undoable removals**: after remove / clear / stale-cleanup, a toast at the bottom offers "Put Back"
+  to restore items at their original positions, auto-dismissing on timeout; policy-based cleanups stay
+  silent; duplicate drops get a "skipped N duplicates" hint.
+- 👁 **Quick Look**: select an item and press **Space** for a native QuickLook card inside the drawer —
+  videos play, PDFs paginate, images zoom; **↑↓ / ←→** switch live, **⏎** opens, **Esc** closes.
+- 🔍 **Search & sort**: click the magnifier or **⌘F** for the search pill (click again / Esc to dismiss),
+  as-you-type filtering with hit highlighting and a celadon `matched/total` counter next to the group name;
+  multiple keywords intersect; **`kind:image` type syntax** (`kind:video`, `kind:code`, `kind:pdf`, …,
+  English and Chinese aliases, multiple kinds union); when the name doesn't match, **Spotlight content
+  search** supplements results (labeled "content match", can be disabled); sort by newest / oldest /
+  name A–Z / type / manual, remembered per group, sort-button icon reflects the current mode.
+- 🚪 **Collapse to a floating chip**: pull the handle to shrink the drawer into a glass **chip** hugging the
+  screen edge (latest thumbnail ＋ monospace count ＋ brand-color pulse dot); click to expand; dropping
+  files onto the chip auto-expands to catch them. Also toggleable from the menu bar.
+- ⚡️ **Slide-in on launch**: the drawer slides out from the right edge at startup (non-activating panel —
+  never steals focus).
+- ⚡ **Thumbnail disk cache**: image / video / PDF thumbnails are cached on disk keyed by
+  "path + mtime + size" fingerprints, so restarts don't re-decode (video frame extraction benefits most);
+  replaced files invalidate automatically.
+- 🔒 **Stays out of your way**: floats above normal windows and shows on every space, yet clicking it never
+  activates away from your frontmost app.
+- 👆 **Quick actions**: double-click opens a file (single-click mode available in Settings); hover reveals
+  "Reveal in Finder / Save As… / Remove"; the context menu has "Copy file", "Copy path",
+  "Move to folder…", "Rename…", "Open With" and everything else; file import lives in the menu bar / main menu (⌘O).
+- ⌫ **Keyboard removal**: Delete removes the selection (whole batch when multiple are selected).
+- 💾 **State restoration**: the item list (pins & manual order included) and sort preferences persist to
+  UserDefaults and come back on restart (entries whose source file is gone are cleaned up).
+- 🧹 **Shelf maintenance**: configurable expiry cleanup (1/7/30 days) and capacity caps (20/50/100 items,
+  evicting oldest first, pinned exempt) — **per-group overrides supported** (Settings → General → group
+  capacity; groups without one follow the global value); changes apply to existing items immediately and
+  converge at launch; stale items can be purged in one click.
+- 🍃 **Menu-bar icon**: tray menu with show/hide drawer, import, export all, recent items, clear, settings,
+  about, quit.
+- 🚀 **Launch at login & Dock toggle**: one-click "launch at login" (SMAppService, synced live with System
+  Settings login items); the Dock icon can be hidden for a menu-bar-only existence, restored anytime.
+- ⚙️ **Settings**: gear icon, menu bar → "Settings…", or **⌘,** — four tabs, all live:
+  - **General**: expand/collapsed at launch, launch at login, purge missing files at startup, default sort,
+    single-click open, auto-clean expired items, capacity cap, current item count & one-click cleanup;
+  - **Appearance**: light/dark/auto, drawer width (280–420pt), screen-height ratio, vertical dock position,
+    dock edge (left/right), dock to mouse's screen on expand (multi-display), material density
+    (ultra-thin/thick/…), compact list, show size/time/thumbnails;
+  - **Behavior**: auto-expand when dragging onto the collapsed chip, auto-collapse after dragging a file out
+    or clearing, auto-collapse when switching apps, panel level (floating/normal), Dock icon toggle;
+  - **Shortcuts**: global hotkey (Carbon RegisterEventHotKey) to expand/collapse from any app, default
+    ⌥Space, click the key box to record a new combo (must include ⌘/⌥/⌃).
 
-## 键盘一览
+## Keyboard reference
 
-| 按键 | 作用 |
+| Key | Action |
 | --- | --- |
-| 单击条目 | 选中（并让抽屉接收键盘；设置可改为直接打开） |
-| ⌘点击 / ⇧点击 | 多选：逐个勾选 / 选区间 |
-| ⌘A | 全选当前展示的条目 |
-| 空格 | 开/关选中条目的快速预览 |
-| ↑ ↓ | 上下移动选中（预览打开时同样生效） |
-| ← → | 预览打开时切换条目（与 ↑↓ 等效） |
-| PageUp / PageDown | 翻页移动选中（一次 8 行） |
-| Home / End | 直达第一条 / 最后一条 |
-| ⌘↑ / ⌘↓ | 手动顺序模式下平移选中条目（自动切入该模式） |
-| ⌘1 … ⌘9 | 切换到第 N 个分组 |
-| ⏎ | 打开选中文件（多选时全部打开） |
-| ⌘↵ | 预览打开时：用默认应用打开当前条目并关闭预览 |
-| ⌘C | 拷贝选中条目的文件（与访达拷贝同构，多选拷多个） |
-| ⌘V | 把剪贴板的文件 / 文本 / 链接放入抽屉 |
-| Delete / ⌘⌫ | 移除选中条目（多选整批移除，提示条可「还原」）；预览打开时移除当前条目并自动轮播到下一条 |
-| Esc | 关闭预览 / 取消选中 / 清空搜索 |
-| ⌘F | 呼出并聚焦搜索框（支持 `kind:图片` 类型语法） |
+| Click item | Select (and give the drawer keyboard focus; single-click-to-open optional) |
+| ⌘-click / ⇧-click | Multi-select: toggle item / select range |
+| ⌘A | Select all visible items |
+| Space | Toggle Quick Look for the selection |
+| ↑ ↓ | Move selection up / down (works while previewing) |
+| ← → | Switch items while previewing (same as ↑↓) |
+| PageUp / PageDown | Page the selection (8 rows) |
+| Home / End | Jump to first / last item |
+| ⌘↑ / ⌘↓ | Nudge selection in manual-order mode (auto-switches to it) |
+| ⌘1 … ⌘9 | Switch to group N |
+| ⏎ | Open selected file(s) (all of them on multi-select) |
+| ⌘↵ | While previewing: open current item with default app and close preview |
+| ⌘C | Copy selected item files (Finder-style, multiple on multi-select) |
+| ⌘V | Put clipboard files / text / links into the drawer |
+| Delete / ⌘⌫ | Remove selection (whole batch; toast offers "Put Back"); while previewing, remove current and auto-advance |
+| Esc | Close preview / deselect / clear search |
+| ⌘F | Focus search (supports `kind:image` type syntax) |
 
-> 键盘只在抽屉持有焦点时接管（单击任意条目即可）；正在搜索框输入时按键完全放行。
+> Keyboard handling only engages while the drawer holds focus (click any item); keystrokes pass through
+> untouched while typing in the search field.
 
-## 自动化：URL Scheme 与快捷指令（Shortcuts）
+## Automation: URL scheme & Shortcuts
 
-抽屉的全部核心操作都可被脚本、终端、快捷指令与 Siri 驱动。安装 .app 后注册
-`filedrawer://` scheme；快捷指令 App 里有同名动作（App Intents）。两条路径共用
-`DrawerCommands`，行为永远一致。
+Every core operation is scriptable — from shell, terminal, Shortcuts and Siri. Installing the .app registers
+the `filedrawer://` scheme; the Shortcuts app gets matching actions (App Intents). Both paths share
+`DrawerCommands`, so behavior is always identical.
 
-### URL 动作参考（11 个）
+### URL actions (11)
 
-| 动作 | 参数 | 说明 |
+| Action | Parameters | Description |
 | --- | --- | --- |
-| `add` | `path=`（可多个）、`group=`（可选） | 放入抽屉 / 指定分组（不存在则建并切换），展开抽屉 |
-| `reveal` | `path=` | 在访达中定位文件 |
-| `remove` | `group=`、`limit=`（0=全部） | 移除分组最新 N 条，可在抽屉内「还原」 |
-| `clear` | `group=` | 清空分组，可在抽屉内「还原」 |
-| `pin` / `unpin` | `group=`、`limit=`（0=全部） | 置顶 / 取消置顶最新 N 条（免于自动清理） |
-| `send-to-front` | `group=`、`limit=`（0=全部） | 最新 N 条移到最前，自动切「手动顺序」 |
-| `move` | `group=`（源）、`to=`（目标，不存在则建且不切视图）、`limit=` | 条目整批移到目标分组 |
-| `rename` | `path=`、`name=` | 按路径重命名条目（同目录，同名自动序号） |
-| `toggle` / `expand` / `collapse` | — | 展开 ↔ 收起 / 展开 / 收起 |
+| `add` | `path=` (repeatable), `group=` (optional) | Add to drawer / group (created & switched to if missing), expands drawer |
+| `reveal` | `path=` | Reveal file in Finder |
+| `remove` | `group=`, `limit=` (0 = all) | Remove newest N items, undoable in-drawer |
+| `clear` | `group=` | Clear group, undoable in-drawer |
+| `pin` / `unpin` | `group=`, `limit=` (0 = all) | Pin / unpin newest N items (exempt from auto-cleanup) |
+| `send-to-front` | `group=`, `limit=` (0 = all) | Move newest N to front, switches to manual order |
+| `move` | `group=` (source), `to=` (target, created without switching), `limit=` | Move items to target group |
+| `rename` | `path=`, `name=` | Rename item by path (in place, collision suffixes) |
+| `toggle` / `expand` / `collapse` | — | Toggle ↔ / expand / collapse |
 
 ```bash
-open "filedrawer://add?path=/tmp/报告.pdf&group=工作"            # 放入「工作」分组
-open "filedrawer://move?group=下载&to=归档&limit=2"              # 最新 2 条移到「归档」
-open "filedrawer://send-to-front?group=工作&limit=5"             # 最新 5 条置前
-open "filedrawer://pin?group=工作&limit=3"                       # 置顶最新 3 条（unpin 取消）
-open "filedrawer://remove?group=工作&limit=3"                    # 移除最新 3 条（可还原）
-open "filedrawer://clear?group=工作"                             # 清空分组（可还原）
-open "filedrawer://rename?path=/tmp/a.txt&name=b.txt"           # 按路径重命名
-open "filedrawer://toggle"                                       # 展开 ↔ 收起
+open "filedrawer://add?path=/tmp/report.pdf&group=Work"            # add to "Work"
+open "filedrawer://move?group=Downloads&to=Archive&limit=2"        # newest 2 → "Archive"
+open "filedrawer://send-to-front?group=Work&limit=5"               # newest 5 to front
+open "filedrawer://pin?group=Work&limit=3"                         # pin newest 3 (unpin reverts)
+open "filedrawer://remove?group=Work&limit=3"                      # remove newest 3 (undoable)
+open "filedrawer://clear?group=Work"                               # clear group (undoable)
+open "filedrawer://rename?path=/tmp/a.txt&name=b.txt"              # rename by path
+open "filedrawer://toggle"                                         # expand ↔ collapse
 ```
 
-路径含中文 / 空格时 `open` 自动做百分号编码；不存在的路径与重复条目在抽屉里给轻提示。
-URL 形式不返回数据——需要读取条目内容时用下面的「读取抽屉条目」意图。
+`open` percent-encodes paths containing non-ASCII / spaces automatically; missing paths and duplicates
+surface as in-drawer hints. URLs return no data — to read drawer contents use the Shortcuts intent below.
 
-### 快捷指令（App Intents，9 个动作 + 7 条 Siri 短语）
+### Shortcuts (App Intents — 9 actions + 7 Siri phrases)
 
-| 动作 | 参数 | 返回 |
+| Action | Parameters | Returns |
 | --- | --- | --- |
-| 放入抽屉 | 文件[]、分组（可选） | 新增数 |
-| 读取抽屉 | 分组（可选）、最多返回（默认 50） | 文件[]（最新在前） |
-| 移除抽屉条目 | 分组（可选）、数量（0=全部） | 移除数（可还原） |
-| 清空抽屉分组 | 分组（可选） | 清掉数（可还原） |
-| 置顶抽屉条目 | 分组（可选）、数量、置顶（开关） | 受影响数 |
-| 条目移到最前 | 分组（可选）、数量 | 移动数 |
-| 移动条目到分组 | 分组（可选）、目标分组、数量 | 移动数 |
-| 重命名抽屉条目 | 文件路径、新名称 | 是否成功 |
-| 展开抽屉 | 动作（切换/展开/收起） | — |
+| Add to Drawer | files[], group (optional) | added count |
+| Read Drawer | group (optional), max results (default 50) | files[] (newest first) |
+| Remove Drawer Items | group (optional), count (0 = all) | removed count (undoable) |
+| Clear Drawer Group | group (optional) | cleared count (undoable) |
+| Pin Drawer Items | group (optional), count, pin (toggle) | affected count |
+| Send Items to Front | group (optional), count | moved count |
+| Move Items to Group | group (optional), target group, count | moved count |
+| Rename Drawer Item | file path, new name | success |
+| Expand Drawer | action (toggle/expand/collapse) | — |
 
-Siri 短语示例：「放入 FileDrawer 抽屉」「读取 FileDrawer 抽屉条目」「清空 FileDrawer 的抽屉分组」。
-「读取 → 处理 → 移除已处理」的自动化闭环由此打通。
+Siri phrase examples: "Add to FileDrawer drawer", "Read FileDrawer drawer items", "Clear FileDrawer drawer group".
+This closes the loop for "read → process → remove processed" automations.
 
-**端到端验证**：URL 路径 `make smoke-automation` 逐条投递并断言 v3 容器状态（8/8；
-也可在 GitHub Actions → CI → Run workflow 手动触发 `automation-smoke` job 在干净 runner 上跑）；
-快捷指令路径有对等的拼装层集成测试（9 意图 × 参数→`run` 层→store 往返语义，
-`IntentsIntegrationTests`——`perform` 仅委托 `run`，行为一致）。
-（add/pin/send-to-front/move/rename/remove/clear/展开收起）。安全机制：FileDrawer 运行中拒绝执行、
-defaults 域已有数据时自动备份-恢复（`--isolated`）、结束自清理。
+**End-to-end verification**: the URL path is exercised by `make smoke-automation` (fires every action and
+asserts store-v3 state, 8/8; also runnable on a clean runner via Actions → CI → Run workflow,
+`automation-smoke` job); the Shortcuts path has equivalent assembly-layer integration tests
+(`IntentsIntegrationTests` — `perform` merely delegates to `run`, keeping both paths in lockstep).
 
-## 使用方法
+## Usage
 
-| 操作 | 方式 |
+| Task | How |
 | --- | --- |
-| 放入 | 把文件从 Finder 拖进抽屉（进当前分组）；或菜单栏图标 →「导入文件…」 |
-| 分组管理 | 头部点分组名：切换 / 新建 / 重命名 / 删除分组；右键条目「移动到分组」 |
-| 放入文本/链接 | 从任意应用拖一段文字 / 链接进抽屉（自动存成 .txt / .webloc）；或复制后 **⌘V**（富文本自动转纯文本） |
-| 取回 | 按住卡片拖出到 Finder / 其它应用窗口 |
-| 打开 | 双击卡片（设置可改为单击打开）；右键「打开方式」可选应用 |
-| 多选 | ⌘点击逐个勾选、⇧点击选区间、⌘A 全选；后续操作作用于整批 |
-| 置顶 | 右键 →「置顶」：钉在最前 + 免于自动清理 |
-| 调整顺序 | 悬停条目左侧出现把手，直接拖到目标行（自动切入手动顺序，跨置顶区拖拽顺带置顶/取消）；或右键「调整顺序」/ ⌘↑ / ⌘↓ |
-| 重命名 | 右键 →「重命名…」（同名自动追加序号） |
-| 定位 | 悬停卡片点「folder」图标 |
-| 拷贝文件 / 路径 | 右键卡片 →「拷贝文件 / 拷贝路径」，或选中后 **⌘C**（拷贝文件） |
-| 归位整理 | 右键卡片 →「移动到文件夹…」（文件移动，条目改指新位置，支持多选整批） |
-| 导出全部 | 菜单栏图标 →「导出全部到文件夹…」 |
-| 移除并反悔 | 悬停 ✕ / Delete 移除后，点底部提示条「还原」放回原位；预览打开时按 Delete 移除当前条目并自动切到下一条继续预览 |
-| 清空 | 菜单栏图标 →「清空抽屉」（同样可「还原」） |
+| Stash | Drag files from Finder into the drawer (lands in current group); or menu-bar icon → "Import files…" |
+| Manage groups | Header group name: switch / create / rename / delete; right-click item → "Move to group" |
+| Stash text/links | Drag a selection / link from any app (saved as .txt / .webloc); or copy, then **⌘V** (rich text auto-flattened) |
+| Retrieve | Drag the card out to Finder / other app windows |
+| Open | Double-click the card (single-click mode in Settings); right-click "Open With" for alternatives |
+| Multi-select | ⌘-click to toggle, ⇧-click for range, ⌘A for all; subsequent actions hit the batch |
+| Pin | Right-click → "Pin": top of list + exempt from auto-cleanup |
+| Rearrange | Hover for the grip handle and drag to a row (manual order auto-engages; dragging across the pin zone pins/unpins); or context menu / ⌘↑ / ⌘↓ |
+| Rename | Right-click → "Rename…" (collision suffixes automatic) |
+| Reveal | Hover the card, click the "folder" icon |
+| Copy file / path | Context menu → "Copy file / Copy path", or select and **⌘C** (copies files) |
+| File away | Context menu → "Move to folder…" (file moves, item follows, batch-capable) |
+| Export all | Menu-bar icon → "Export all to folder…" |
+| Remove & regret | Hover ✕ / Delete removes; toast "Put Back" restores to original position; while previewing, Delete removes and auto-advances |
+| Clear | Menu-bar icon → "Clear drawer" (also undoable) |
 
-## 分发与公证就绪
+## Distribution & notarization readiness
 
-当前 DMG 为 **ad-hoc 签名**（无 Developer ID）——发给同事/朋友用没问题，但他们首次打开会被
-Gatekeeper 拦截（右键 → 打开放行，或 `xattr -dr com.apple.quarantine FileDrawer.app`）。
-若要公网分发免拦截，按以下清单补齐（脚本已就绪，只需三步）：
+The current DMG is **ad-hoc signed** (no Developer ID) — fine for friends & colleagues, but the first
+launch hits Gatekeeper (right-click → Open, or `xcrun ... xattr -dr com.apple.quarantine FileDrawer.app`).
+To distribute publicly without the wall, complete this checklist (scripts are ready — three steps):
 
-| # | 事项 | 命令 / 位置 |
+| # | Item | Command / where |
 | --- | --- | --- |
-| 1 | Apple Developer Program 账号（年费） | [developer.apple.com](https://developer.apple.com) |
-| 2 | 导入 Developer ID Application 证书 | 钥匙串（Xcode → Settings → Accounts） |
-| 3 | make_app.sh 签名段改为证书签名 | `codesign --force --options runtime --timestamp -s "Developer ID Application: <名字> (<TeamID>)" "$APP"` |
-| 4 | App Store Connect 生成 App 专用密码 | [notarize](https://notary.apple.com)（存入钥匙串：`xcrun notarytool store-credentials`） |
-| 5 | 打包后公证 .app | `xcrun notarytool submit <zip> --keychain-profile <profile> --wait` |
-| 6 | 公证结果钉到 DMG | `xcrun stapler staple <dmg>` |
-| 7 | 验证 | `spctl -a -v --toplevel <app>` 应输出 `accepted`；`stapler validate <dmg>` |
+| 1 | Apple Developer Program account (annual fee) | [developer.apple.com](https://developer.apple.com) |
+| 2 | Import a Developer ID Application certificate | Keychain (Xcode → Settings → Accounts) |
+| 3 | Switch make_app.sh signing to the certificate | `codesign --force --options runtime --timestamp -s "Developer ID Application: <name> (<TeamID>)" "$APP"` |
+| 4 | Create an app-specific password | [notary](https://notary.apple.com) (store: `xcrun notarytool store-credentials`) |
+| 5 | Notarize the .app after packaging | `xcrun notarytool submit <zip> --keychain-profile <profile> --wait` |
+| 6 | Staple the result to the DMG | `xcrun stapler staple <dmg>` |
+| 7 | Verify | `spctl -a -v --toplevel <app>` should print `accepted`; `stapler validate <dmg>` |
 
-以上清单已由 `.github/workflows/release.yml` 全部自动化：推送 `v*` tag 即自动
-测试 → 零警告 → universal 构建 → 打包 → 发 GitHub Release（Notes 取自 CHANGELOG 对应段，
-附 DMG / zip / SHA256SUMS）。仓库 Secrets 配置后自动启用：
+The whole checklist is automated in `.github/workflows/release.yml`: pushing a `v*` tag runs
+tests → zero-warning build → universal package → tag/version consistency check → GitHub Release
+(notes from the matching CHANGELOG section, with DMG / zip / SHA256SUMS). Configure the repo Secrets
+to enable:
 
-| Secret | 用途 |
+| Secret | Purpose |
 | --- | --- |
-| `SIGN_IDENTITY` | 如 `Developer ID Application: 名字 (TeamID)`；不配置则 ad-hoc 签名 |
-| `APPLE_ID` + `APPLE_APP_SPECIFIC_PASSWORD` + `APPLE_TEAM_ID` | 三者齐备时对 DMG notarytool 公证 + stapler 钉证 |
+| `SIGN_IDENTITY` | e.g. `Developer ID Application: name (TeamID)`; unset → ad-hoc signing |
+| `APPLE_ID` + `APPLE_APP_SPECIFIC_PASSWORD` + `APPLE_TEAM_ID` | All three → notarytool notarization + staple of the DMG |
 
-本地手工出包时 `SIGN_IDENTITY` 环境变量同样生效：`SIGN_IDENTITY="Developer ID Application: …" make dmg`。
+`SIGN_IDENTITY` works for local packaging too: `SIGN_IDENTITY="Developer ID Application: …" make dmg`.
 
-## 界面语言（中 / 英）
+## UI language (English / Chinese)
 
-设置 → 外观 → **界面语言**：跟随系统 / 中文 / English，切换立即生效
-（抽屉、菜单栏、主菜单与设置面板即时重建，无需重启）。
+Settings → Appearance → **UI language**: follow system / Chinese / English, applied instantly (drawer,
+menu bar, main menu and settings rebuild without restart).
 
-工程上的增量迁移方案：基准语言是中文，代码里的 key 即中文原文；
-英文翻译集中在 `Sources/FileDrawer/Resources/en.lproj/Localizable.strings`，
-未进表的字符串自动回退中文——永远不会因缺翻译出现 key 乱码，新文案可逐步补表。
+The engineering approach: Chinese is the base language (in-code keys are the Chinese originals);
+English translations live in `Sources/FileDrawer/Resources/en.lproj/Localizable.strings`, and any string
+missing from the table falls back to Chinese — no key gibberish ever, new strings can be translated
+incrementally.
 
-## 无障碍（VoiceOver）
+## Accessibility (VoiceOver)
 
-- 条目行合成朗读「名称，已置顶/文件已不存在，大小 · 时间」，提示单击/双击语义；
-- 全部图标按钮（搜索/设置/收起/行内操作/预览关闭）带 VoiceOver 标签；
-- 排序与分组切换菜单、搜索输入框均有可读标签；
-- 悬停才出现的行内按钮对无障碍树隐藏（等价操作经右键菜单与键盘可达），避免「隐形焦点」；
-- 移除 / 清空后的「还原」提示与轻提示出现时主动播报（`NSAccessibility` announcement）；
-- 瓷片符号色满足 WCAG ≥3:1（`TileContrastTests` 对全部 350+ 类型在明暗两种模式下断言）。
+- Item rows read out as "name, pinned / file missing, size · time" with click/double-click semantics;
+- Every icon button (search / settings / collapse / inline actions / preview close) carries VoiceOver labels;
+- Sort and group menus, and the search field, expose readable labels;
+- Hover-only inline buttons are hidden from the accessibility tree (equivalents exist via context menu
+  & keyboard) to avoid "invisible focus";
+- Removal / clear toasts and hints announce themselves (`NSAccessibility` announcements);
+- Tile symbol colors meet WCAG ≥3:1 (`TileContrastTests` asserts all 350+ types in both appearances).
 
-## 数据与持久化
+## Data & persistence
 
-条目（含置顶、分组归属）、分组列表、当前分组合并在**单一版本化容器**（v3，单 key 原子写）里，
-杜绝多 key 分写的崩溃不一致窗口；v1（平铺数组）/ v2（分组字段）旧布局在启动时自动迁移
-（归一化：缺分组建「默认」、nil 归第一组、无效当前分组回落第一组），旧 key 保留只读——
-回滚旧版本仍能读到迁移时快照。迁移路径有诊断日志与专项测试（往返无损 / v1 / v2 / 无效 current / 优先级）。
+Items (pins, group membership), group list and current group live in a **single versioned container**
+(v3, one-key atomic writes) — no multi-key partial-write inconsistency windows; v1 (flat array) and
+v2 (group fields) layouts migrate automatically at launch (normalization: missing group → "Default",
+nil → first group, invalid current group → first group), with old keys retained read-only so rolling
+back still reads the migration snapshot. Migration paths carry diagnostic logging and dedicated tests
+(round-trip / v1 / v2 / invalid current / precedence).
 
-## 诊断
+## Diagnostics
 
-菜单栏 →「导出诊断信息…」：把版本 / 系统 / 条目与分组计数 + 最近 200 条操作日志
-（内存环形缓冲，默认不落盘；不含文件路径等敏感内容）写成文本文件，便于排障。
-关键路径（启动、展开收起、全部自动化动作、旧数据迁移、重命名失败）均埋点，
-同时在系统「控制台」按 subsystem `com.wangxiao.filedrawer` 过滤可见。
+Menu bar → "Export diagnostics…": writes version / OS / item & group counts + the last 200 operation-log
+entries (in-memory ring buffer, nothing on disk by default; no file paths or other sensitive content) to a
+text file. Key paths (launch, expand/collapse, all automation actions, legacy migration, rename failures)
+are instrumented, and visible in Console.app under subsystem `com.wangxiao.filedrawer`.
 
-## 性能
+## Performance
 
-`swift test` 内置度量基线（`PerformanceBaselineTests`，XCTest measure），覆盖热路径：
+`swift test` ships measured baselines (`PerformanceBaselineTests`, XCTest measure) covering hot paths:
 
-| 度量项 | 规模 | 本机参考值 |
+| Metric | Scale | Reference (dev machine) |
 | --- | --- | --- |
-| 条目持久化（JSON 编码 + 解码往返） | 1000 条 / 5 分组 | ~18ms |
-| 展示管线（kind: 解析 + 过滤 + 置顶分区 + 排序） | 500 条 | ~2.4ms |
-| 缩略图缓存指纹键（SHA-256） | 1000 次 | ~23ms |
-| 按组容量淘汰 | 500 条 / 5 分组 | ~0.8ms |
+| Item persistence (JSON encode + decode round-trip) | 1000 items / 5 groups | ~18ms |
+| Display pipeline (kind: parsing + filter + pin partition + sort) | 500 items | ~2.4ms |
+| Thumbnail cache fingerprint key (SHA-256) | 1000 ops | ~23ms |
+| Per-group capacity eviction | 500 items / 5 groups | ~0.8ms |
 
-配套优化：条目落盘走 **150ms 防抖**（拖拽重排 / 置顶切换等高频变更合并成一次编码），
-退出与启动迁移路径立即 `flushPersist` 同步落盘；缩略图按「路径+mtime+大小」指纹落磁盘缓存，
-重启不再重复解码。
+Supporting optimizations: item persistence is **debounced 150ms** (drag-reorder / pin-toggle bursts merge
+into one encode), quit and launch-migration paths `flushPersist` synchronously; thumbnails cache to disk
+by "path+mtime+size" fingerprint so restarts never re-decode.
 
-## 项目结构
+## Project structure
 
 ```
 Sources/FileDrawer/
-├── main.swift               # AppKit 入口（NSApplication + 自定义生命周期）
-├── AppDelegate.swift        # 抽屉式 NSPanel、键盘路由、主菜单、菜单栏图标、设置应用、URL 分发
-├── AppSettings.swift        # 集中式设置模型（UserDefaults 持久化，含语言/多屏/内容搜索开关）
-├── L10n.swift               # 本地化层：中文 key 基准 + 英文表回退（增量迁移安全）
-├── DrawerLayout.swift       # 抽屉几何纯函数（宽度/高度比例/停靠位置/多屏取屏）
-├── DrawerTheme.swift        # 设计系统：靛紫身份色（明暗自适应）+ 动效预设（Spring）
-├── TypeColorContrast.swift  # 瓷片类型色 WCAG 对比度计算与定向调整（含预览样本构建）
-├── WindowSpringAnimator.swift # 窗口 frame 弹簧物理动画器（数值积分，带过冲回弹）
-├── HotKeyCenter.swift       # Carbon 全局热键注册
-├── SettingsView.swift       # 设置面板 UI（四 Tab + 热键录制 + 登录项 + 分组容量 + 对比度预览）
-├── ShelfPersistence.swift   # 持久化 v3：版本化容器（单 key 原子写）与 v1/v2 迁移
-├── ShelfModel.swift         # 数据模型 / 分组 / 置顶排序 / 缩略图管线 / 撤销快照 / Store
-├── InboxStore.swift         # 收件箱：文本/链接物化成真实文件（命名/去重/清扫）
-├── ClipboardSupport.swift   # 剪贴板互通（拷贝文件 / 粘贴文件与富文本）
-├── InteractionModel.swift   # 选中多选 / kind: 搜索 / 每组排序 / 预览等交互状态
-├── FileIconStyle.swift      # 350+ 文件类型的专属图标样式目录（对比度保障色）
-├── DragSupport.swift        # 拖出 provider 构造 + 拖入载荷解析 + 相对时间本地化
-├── DragOutSupport.swift     # 多选拖出：NSDraggingSession 拖拽源（×N 角标预览）
-├── ReorderDrag.swift        # 行内拖拽排序：自定义 UTType 载荷识别
-├── OpenWithCatalog.swift    # 「打开方式」应用目录（默认应用排最前）
-├── SpotlightContentSearch.swift # 内容搜索：NSMetadataQuery（防抖/超时/转义）
-├── ThumbnailDiskCache.swift # 缩略图磁盘缓存（指纹键 + LRU 淘汰）
-├── DiagnosticsLog.swift     # 轻量诊断日志（内存环形 + os_log 双写 + 导出）
-├── DrawerCommands.swift     # 自动化命令层（URL 与快捷指令共用的九类操作）
-├── URLRouter.swift          # filedrawer:// URL 解析（11 类动作）
-├── DrawerIntents.swift      # App Intents ×9 + App Shortcuts（Siri 短语）
-└── ContentView.swift        # SwiftUI 界面（头部/分组切换/列表/行内拖拽/预览/空态/toast）
+├── main.swift               # AppKit entry (NSApplication + custom lifecycle)
+├── AppDelegate.swift        # drawer NSPanel, keyboard routing, main menu, menu-bar icon, settings apply, URL dispatch
+├── AppSettings.swift        # centralized settings model (UserDefaults-backed; language/multi-display/content-search toggles)
+├── L10n.swift               # localization: Chinese-key base + English table fallback (increment-migration-safe)
+├── DrawerLayout.swift       # drawer geometry pure functions (width/height ratio/dock position/multi-display)
+├── DrawerTheme.swift        # design system: indigo identity colors (appearance-adaptive) + motion presets (Spring)
+├── TypeColorContrast.swift  # tile type-color WCAG contrast computation & directed adjustment (with preview samples)
+├── WindowSpringAnimator.swift # window-frame spring-physics animator (numeric integration, overshoot bounce)
+├── HotKeyCenter.swift       # Carbon global hotkey registration
+├── SettingsView.swift       # settings panel UI (4 tabs + hotkey recorder + login item + group caps + contrast preview)
+├── ShelfPersistence.swift   # persistence v3: versioned container (single-key atomic writes) & v1/v2 migration
+├── ShelfModel.swift         # data model / groups / pin sorting / thumbnail pipeline / undo snapshots / Store
+├── InboxStore.swift         # inbox: text/link materialization into real files (naming/dedup/sweep)
+├── ClipboardSupport.swift   # clipboard interop (copy files / paste files & rich text)
+├── InteractionModel.swift   # selection/multi-select/kind: search/per-group sort/preview interaction state
+├── FileIconStyle.swift      # dedicated icon styles for 350+ file types (contrast-guaranteed colors)
+├── DragSupport.swift        # drag-out provider construction + drop payload parsing + relative-time localization
+├── DragOutSupport.swift     # multi-select drag-out: NSDraggingSession source (×N badge preview)
+├── ReorderDrag.swift        # in-list drag reorder: custom UTType payload identification
+├── OpenWithCatalog.swift    # "Open With" app catalog (default app first)
+├── SpotlightContentSearch.swift # content search: NSMetadataQuery (debounce/timeout/escaping)
+├── ThumbnailDiskCache.swift # thumbnail disk cache (fingerprint keys + LRU eviction)
+├── DiagnosticsLog.swift     # lightweight diagnostics log (memory ring + os_log dual write + export)
+├── DrawerCommands.swift     # automation command layer (nine operations shared by URL & Shortcuts)
+├── URLRouter.swift          # filedrawer:// URL parsing (11 action types)
+├── DrawerIntents.swift      # App Intents ×9 + App Shortcuts (Siri phrases)
+└── ContentView.swift        # SwiftUI UI (header/group switcher/list/in-list drag/preview/empty state/toast)
 Sources/FileDrawer/Resources/{zh-Hans,en}.lproj/
-                             # 本地化表（英文值；中文 key 即原文）
-Tests/FileDrawerTests/       # 189 个测试：拖拽往返 / 多选 / 分组与置顶 / 每组排序 /
-                             # 失效检测 / 重命名 / 导出 / 缓存 / 搜索语法 / 持久化 v3 /
-                             # URL 与 Intents 自动化 / 对比度 / 本地化 / 性能基线 / …
-scripts/smoke_automation.sh  # 自动化端到端冒烟（make smoke-automation）
+                             # localization tables (English values; Chinese keys are the originals)
+Tests/FileDrawerTests/       # 212 tests: drag round-trips / multi-select / groups & pins / per-group sort /
+                             # stale detection / rename / export / cache / search syntax / persistence v3 /
+                             # URL & Intents automation / contrast / localization / performance baselines / …
+scripts/smoke_automation.sh  # automation end-to-end smoke (make smoke-automation)
 make_app.sh / install.sh / uninstall.sh / make_dmg.sh / Makefile
-                             # 构建 / 一键安装 / 卸载 / DMG 分发（make app|install|uninstall|dmg）
+                             # build / one-shot install / uninstall / DMG distribution (make app|install|uninstall|dmg)
 ```
 
-## 实现要点
+## Implementation notes
 
-- **抽屉窗口**：无边框 `NSPanel(styleMask: [.borderless, .nonactivatingPanel])`，
-  `level = .floating` + `canJoinAllSpaces`，右缘对齐、左侧大圆角 +
-  `.ultraThinMaterial` 毛玻璃底；显隐动画由 `WindowSpringAnimator` 用弹簧物理
-  逐帧移动 frame（欠阻尼，带轻微过冲回弹），收起/展开都有真实的"抽屉手感"。
-- **多屏**：停靠屏幕由 `DrawerLayout.targetScreen(followMouse:)` 统一解析——
-  可选「展开时停靠到鼠标所在屏幕」（在哪块屏唤出就贴哪块屏），显示器热插拔即时重贴边。
-  *设计取舍：不做「每屏独立记忆收起/展开态」——抽屉是单窗口，无法同时在两屏呈现
-  各自状态；「记住上次在哪块屏」与跟随鼠标模式重合，而「每屏各自的展开态」在
-  切屏时语义断裂（用户预期状态连续）。拔屏后抽屉消失的问题由热插拔重贴边解决。*
-- **单文件拖出**：`onDrag { item.dragProvider() }`。provider 同时注册
-  *文件表示*（接收端拿到真实文件副本）与 *file-url 数据表示*（通用地址语义）。
-- **多选拖出**：多选时瓷片上叠一层 `MultiDragSourceView`（`NSDraggingSession`
-  拖拽源），一次把全部选中条目作为多条 `fileURL` 粘贴板拖出（×N 角标预览）；
-  非多选时该层隐藏（`hitTest` 忽略），一切常规交互不受影响。
-- **拖入**：`.onDrop(of: [.fileURL, .url, .utf8PlainText, .plainText], delegate:)`，
-  逐个解析 provider（优先 `loadObject(ofClass: URL.self)`，兜底原始数据），批量入列并去重；
-  文本 / 链接载荷先经 `InboxStore` 物化成收件箱里的真实文件再入列——
-  排序、缩略图、拖出、QuickLook 对它们与普通文件完全一致；富文本粘贴走 RTF→纯文本回退。
-- **行内拖拽排序**：排序把手 provider 附带一个**仅本进程可见的自定义 UTType** 载荷；
-  行级接收器只认该类型（外部文件拖入自然落到抽屉级接收器、拖到行外取消），
-  落到目标行上即整批前插并自动切「手动顺序」，跨置顶分区拖拽顺带切换置顶态。
-- **多抽屉分组**：`ShelfItem.drawerID` + `DrawerGroup`，头部菜单切换/新建/重命名/删除
-  （删除时条目移到剩余分组，最后一个不可删）；每组独立记忆排序方式与容量上限；
-  旧数据（v1 平铺数组 / v2 隐式分组字段）在 `ShelfPersistence` 迁移进 v3 版本化容器。
-- **搜索**：名称多关键字取交集 + `kind:` 类型语法（中英文别名）；
-  名称未命中时防抖 350ms 用 `NSMetadataQuery` 检索 `kMDItemTextContent` 补充
-  「内容匹配」结果（3 秒超时、查询串转义、设置可关）。
-- **自动化**：`DrawerCommands` 是唯一业务入口，`filedrawer://` URL（`URLRouter` 解析）
-  与快捷指令 App Intents（`perform → run` 拼装层）都委托它——两条路径行为永远一致；
-  移除/清空类动作全部走可还原路径。URL 冒烟（`make smoke-automation`）与
-  Intents 拼装层测试对等地覆盖这两条路径。
-- **本地化**：中文原文即 key（基准语言），英文值集中 `en.lproj/Localizable.strings`，
-  `L10n.t` 未命中回退中文——增量迁移永远不会出现 key 乱码；切换语言即时重建
-  抽屉/菜单/设置面板，无需重启；App Intents 面板字符串靠主包 `.lproj`（打包时同源复制）。
-- **撤销**：用户发起的移除 / 清空 / 清理失效条目会记录 `RemovalSnapshot`（条目 + 原位置），
-  底部提示条 4.5 秒内可一键还原；新的移除会顶掉旧快照，策略清理（容量淘汰 / 过期收敛）不记录。
-  收件箱物化文件在条目移除且撤销窗口关闭后才由 `sweep` 回收，保证「移除 → 反悔」永远成立。
-- **可观测与稳健性**：诊断日志（内存环形 200 条 + os_log 双写，菜单栏可导出）埋点全部
-  自动化动作与迁移事件；条目落盘 150ms 防抖、退出即 flush；失效条目后台扫描（合并重扫）
-  只影响展示不自动删；CI 带 release 零警告门禁。
+- **Drawer window**: borderless `NSPanel(styleMask: [.borderless, .nonactivatingPanel])` with
+  `level = .floating` + `canJoinAllSpaces`, right-edge aligned, big left corner radius +
+  `.ultraThinMaterial` glass; show/hide is `WindowSpringAnimator` moving the frame with spring physics
+  (underdamped, slight overshoot) — the drawer genuinely feels like a drawer.
+- **Multi-display**: docked screen resolved by `DrawerLayout.targetScreen(followMouse:)` — optional
+  "dock to mouse's screen on expand" (the drawer hugs whichever screen you summon it on), hot-plug
+  re-docks instantly. *Design tradeoff: no per-screen expand/collapse memory — the drawer is a single
+  window and can't show two states at once; "remember last screen" collapses into follow-mouse mode, and
+  per-screen state breaks continuity when switching screens. The unplug-disappears problem is solved by
+  hot-plug re-docking.*
+- **Single-file drag out**: `onDrag { item.dragProvider() }`. The provider registers both the *file
+  representation* (receiver gets a real file copy) and the *file-url data representation* (generic URL semantics).
+- **Multi-select drag out**: with a multi-selection, a `MultiDragSourceView` layer (`NSDraggingSession`
+  source) sits over the tiles, dragging all selected items as multiple `fileURL` pasteboard entries at once
+  (×N badge preview); hidden otherwise (`hitTest` ignores it), never disturbing normal interaction.
+- **Drag in**: `.onDrop(of: [.fileURL, .url, .utf8PlainText, .plainText], delegate:)` parses providers one
+  by one (prefers `loadObject(ofClass: URL.self)`, raw-data fallback), batch-inserts with dedup; text/link
+  payloads materialize through `InboxStore` into real inbox files first — sorting, thumbnails, drag-out and
+  QuickLook treat them exactly like ordinary files; rich-text paste goes RTF → plain-text fallback.
+- **In-list drag reorder**: the grip handle's provider carries a **process-local custom UTType** payload;
+  row-level receivers accept only that type (external file drops naturally fall through to the drawer-level
+  receiver; dropping outside rows cancels); landing on a row inserts the batch before it and engages manual
+  ordering; dragging across the pin zone toggles pin state.
+- **Groups**: `ShelfItem.drawerID` + `DrawerGroup`; header menu switches/creates/renames/deletes (items
+  move to a remaining group on delete; the last group can't be deleted); per-group sort memory and capacity
+  caps; legacy data (v1 flat array / v2 implicit fields) migrates into the v3 container in `ShelfPersistence`.
+- **Search**: name keywords intersect + `kind:` type syntax (English & Chinese aliases); when the name
+  misses, a debounced (350ms) `NSMetadataQuery` over `kMDItemTextContent` supplements "content match"
+  results (3s timeout, query escaping, opt-out in Settings).
+- **Automation**: `DrawerCommands` is the single business entry; both `filedrawer://` URLs (`URLRouter`)
+  and Shortcuts App Intents (`perform → run` assembly) delegate to it — behavior is always identical;
+  remove/clear-style actions are all undoable. URL smoke (`make smoke-automation`) and Intents
+  assembly tests cover both paths in parallel.
+- **Localization**: Chinese originals as keys (base language), English values centralized in
+  `en.lproj/Localizable.strings`; `L10n.t` falls back to Chinese — incremental migration can never produce
+  key gibberish; language switching rebuilds drawer/menu/settings live; App Intents panel strings rely on
+  the main bundle `.lproj` (copied at package time).
+- **Undo**: user-initiated remove / clear / stale-cleanup records a `RemovalSnapshot` (items + original
+  positions); the bottom toast offers one-click restore for 4.5s; a newer removal displaces the older
+  snapshot; policy cleanups (capacity eviction / expiry convergence) don't record. Inbox-materialized files
+  are reclaimed by `sweep` only after the item is removed and the undo window closes — "remove → regret"
+  always works.
+- **Observability & robustness**: diagnostics log (200-entry memory ring + os_log dual write, exportable
+  from the menu bar) instruments all automation actions and migration events; persistence debounced 150ms,
+  flushed on quit; stale-item background scans (merge-coalesced) affect display only, never auto-delete;
+  CI enforces a zero-warning gate on release builds.
 
-## 参与贡献
+## Contributing
 
-欢迎 Issue 与 PR！开发环境、项目约定、发版流程见 [CONTRIBUTING.md](CONTRIBUTING.md)，
-社区行为准则见 [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)。
-发版由维护者执行：`zsh scripts/cut_release.sh --version x.y.z --push` 推 tag 自动出 Release。
+Issues and PRs welcome! Development setup, project conventions and the release process live in
+[CONTRIBUTING.md](CONTRIBUTING.md); community standards in [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
+Releases are cut by maintainers: `zsh scripts/cut_release.sh --version x.y.z --push` tags & ships
+automatically.
 
-## 安全
+## Security
 
-发现安全漏洞请**不要**开公开 Issue：使用
-[GitHub 私密漏洞报告](https://github.com/kingsxiao/mac-file-drawer/security/advisories/new)，
-支持版本、报告渠道与发行物校验方式见 [SECURITY.md](SECURITY.md)。
+Please **don't** open public issues for vulnerabilities: use
+[GitHub private vulnerability reporting](https://github.com/kingsxiao/mac-file-drawer/security/advisories/new);
+supported versions, reporting channels and artifact verification are described in [SECURITY.md](SECURITY.md).
 
-## 许可证
+## License
 
 [MIT](LICENSE) © wangxiao (kingsxiao) and contributors
