@@ -1369,7 +1369,7 @@ private struct ItemRow: View {
 // 44×100 的玻璃芯片与停靠边留 3pt 悬浮缝、自带投影，像贴在屏幕边的便签夹。
 // 内容自上而下：最新一张缩略瓷片（里面是什么）、计数（等宽粗体）、
 // 品牌紫状态灯（有内容的呼吸点）。整枚芯片就是按钮；悬停 = 整枚滑出 6pt +
-// 投影加深 + 品牌紫描边——一个动作一个焦点。空态换成虚线描边 + 托盘图形。
+// 投影加深——纯物理动作，不加任何描边（用户定稿）。空态换成虚线描边 + 托盘图形。
 
 private struct CollapsedTabView: View {
     @ObservedObject var store: ShelfStore
@@ -1423,8 +1423,8 @@ private struct CollapsedTabView: View {
                 chipShape.fill(settings.material.material)
             )
             .overlay {
-                // 静息发丝描边：结构恒定（空态虚线示「空槽」、常态实线），不随悬停换样式——
-                // StrokeStyle 不可动画，虚线⇄实线切换会整层闪跳
+                // 静息发丝描边：结构恒定（空态虚线示「空槽」、常态实线），不随悬停变化——
+                // 悬停不加任何描边（用户定稿），反馈只靠滑出 + 投影的物理动作
                 chipShape.strokeBorder(
                     Color.primary.opacity(peekItems.isEmpty ? 0.16 : 0.10),
                     style: peekItems.isEmpty
@@ -1432,13 +1432,6 @@ private struct CollapsedTabView: View {
                         : StrokeStyle(lineWidth: 1)
                 )
                 .allowsHitTesting(false)
-            }
-            .overlay {
-                // 悬停光环：颜色与结构恒定、只动画透明度——避开动态色跨色插值
-                // （品牌紫是 NSColor provider 包装色，与灰互插会闪帧）；2pt 在小芯片上更稳
-                chipShape.strokeBorder(DrawerTheme.accent, lineWidth: 2)
-                    .opacity(hovered ? 0.45 : 0)
-                    .allowsHitTesting(false)
             }
             .overlay {
                 // 拖拽悬停的接收罩染
