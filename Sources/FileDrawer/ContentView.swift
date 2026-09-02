@@ -802,6 +802,9 @@ private struct ItemRow: View {
             .opacity(hovered ? 1 : 0)
             .accessibilityHidden(!hovered) // 不可见时不可聚焦；等价操作经右键菜单/键盘可达
         }
+        // 悬停：行内容右移让出左缘沟槽，排序把手住进沟槽（不再覆盖瓷片）——
+        // 让位动作本身就是「可以拖动」的暗示
+        .padding(.leading, hovered ? gripGutter : 0)
         .padding(.horizontal, 12)
         .padding(.vertical, settings.compactRows ? 6 : 10.5)
         .background(
@@ -836,34 +839,17 @@ private struct ItemRow: View {
                     .allowsHitTesting(false)
             }
         }
-        // 悬停出现的排序把手：拖它调整顺序（拖出抽屉外仍是拷贝文件）。
-        // 毛玻璃小芯片 + 微投影保证在任何缩略图/瓷片上都有对比度——
-        // 裸图标贴着放大后的瓷片落影会被"吃掉"（实测被误读为遮挡）
+        // 悬停出现的排序把手：纤细裸图标住在左缘沟槽里（悬停时内容右移让位），
+        // 落在行卡片自身安静的底色上、不覆盖瓷片——天然有对比度，无芯片无投影
         .overlay(alignment: .leading) {
             Image(systemName: "line.3.horizontal")
-                .font(.system(size: 10, weight: .semibold))
+                .font(.system(size: 9.5, weight: .semibold))
                 .foregroundStyle(.secondary)
-                .frame(width: 16, height: settings.compactRows ? 30 : 38)
-                .background(
-                    Capsule(style: .continuous)
-                        .fill(.ultraThinMaterial)
-                        .overlay(
-                            Capsule(style: .continuous).strokeBorder(
-                                LinearGradient(
-                                    stops: [
-                                        .init(color: Color.white.opacity(colorScheme == .dark ? 0.22 : 0.55), location: 0),
-                                        .init(color: Color.white.opacity(0.06), location: 1),
-                                    ],
-                                    startPoint: .top, endPoint: .bottom
-                                ),
-                                lineWidth: 0.8
-                            )
-                        )
-                        .shadow(color: .black.opacity(0.14), radius: 2.5, y: 1)
-                )
+                .frame(width: gripGutter - 3)
+                .padding(.vertical, 5)                 // 只扩命中区，不加视觉体积
                 .contentShape(Rectangle())
                 .opacity(hovered ? 1 : 0)
-                .scaleEffect(hovered ? 1 : 0.55)
+                .scaleEffect(hovered ? 1 : 0.6)
                 .allowsHitTesting(hovered)
                 .animation(DrawerMotion.iconHover, value: hovered)
                 .onDrag {
@@ -873,7 +859,7 @@ private struct ItemRow: View {
                     return provider
                 }
                 .help(L10n.t("拖动调整顺序（自动切入手动顺序；拖出抽屉外 = 拷贝文件）"))
-                .padding(.leading, 2.5)
+                .padding(.leading, 7.5)
         }
         // 新条目：行底从左到右扫过一道品牌色光后淡出
         .overlay(
@@ -1011,6 +997,9 @@ private struct ItemRow: View {
     }
 
     private var tileSize: CGFloat { settings.compactRows ? 32 : 42 }
+
+    /// 悬停时行内容右移让出的左缘沟槽宽度：排序把手的家（紧凑档收窄）
+    private var gripGutter: CGFloat { settings.compactRows ? 14 : 16 }
 
     /// 名称字号：紧凑档随瓷片收敛一档（13→12.5），文字栏不再与 32pt 瓷片等高争位，
     /// 让瓷片重新成为行的视觉主导；标准档维持 13（469e63a 定稿的可读性）
