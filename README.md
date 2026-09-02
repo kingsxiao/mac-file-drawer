@@ -15,22 +15,22 @@
 ## 界面预览
 
 <p align="center">
-  <img src="docs/screenshots/light.png" width="400" alt="File Drawer 展开态：分组徽章、置顶图钉、真实缩略图与着色瓷片">
+  <img src="docs/screenshots/light.png" width="390" alt="File Drawer 展开态：分组徽章、置顶图钉、真实缩略图与着色瓷片">
 </p>
 <p align="center"><sub>展开的抽屉：头部分组切换与计数 · 置顶区（图钉角标）· 图片 / 视频 / PDF 真实缩略图 · 其余类型着色瓷片</sub></p>
 
 <table>
   <tr>
     <td align="center">
-      <img src="docs/screenshots/search.png" width="340" alt="搜索 kind:图片 类型过滤"><br>
+      <img src="docs/screenshots/search.png" width="330" alt="搜索 kind:图片 类型过滤"><br>
       <sub>搜索 <code>kind:图片</code>：类型语法过滤<br>＋ 青瓷 <code>2/10</code> 匹配计数</sub>
     </td>
     <td align="center">
-      <img src="docs/screenshots/dark.png" width="340" alt="深色外观"><br>
+      <img src="docs/screenshots/dark.png" width="330" alt="深色外观"><br>
       <sub>深色外观：玻璃与品牌色<br>整体自适应提亮一档</sub>
     </td>
     <td align="center">
-      <img src="docs/screenshots/collapsed-chip.png" width="132" alt="收起成悬浮芯片"><br>
+      <img src="docs/screenshots/collapsed-chip.png" width="120" alt="收起成悬浮芯片"><br>
       <sub>收起成贴边悬浮芯片：<br>最新缩略图 ＋ 计数 ＋ 呼吸点</sub>
     </td>
   </tr>
