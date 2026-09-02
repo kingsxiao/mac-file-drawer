@@ -1366,10 +1366,11 @@ private struct ItemRow: View {
 
 // MARK: - 收起态：贴屏幕边缘的悬浮芯片，点击展开；拖文件上去自动展开接收
 // 设计（方案定稿 A「悬浮芯片」）：收起态是一件「小物件」而非一条高条——
-// 44×100 的玻璃芯片与停靠边留 3pt 悬浮缝、自带投影，像贴在屏幕边的便签夹。
+// 44×100 的玻璃芯片与停靠边留 3pt 悬浮缝，像贴在屏幕边的便签夹。
 // 内容自上而下：最新一张缩略瓷片（里面是什么）、计数（等宽粗体）、
-// 品牌紫状态灯（有内容的呼吸点）。整枚芯片就是按钮；芯片不带任何描边（用户定稿），
-// 边界感完全由投影承担；悬停 = 整枚滑出 6pt + 投影加深——纯物理动作。空态换托盘图形。
+// 品牌紫状态灯（有内容的呼吸点）。整枚芯片就是按钮；芯片不带任何描边与投影
+// （用户定稿），边界感由材质本身与屏幕内容的对比承担；悬停 = 整枚滑出 6pt——
+// 纯物理动作。空态换托盘图形。
 
 private struct CollapsedTabView: View {
     @ObservedObject var store: ShelfStore
@@ -1436,13 +1437,6 @@ private struct CollapsedTabView: View {
                 }
             }
             .contentShape(chipShape)
-            // 悬浮物件的投影：静息贴墙浅影，悬停加深外扩（「被拿起来」）。
-            // x 恒为 0——横向偏移会让阴影缘爬过 1pt 描边，看起来像边框脏了
-            .shadow(
-                color: .black.opacity(hovered ? 0.24 : 0.14),
-                radius: hovered ? 10 : 6,
-                y: hovered ? 4 : 2
-            )
             .offset(x: hovered ? (settings.edge == .right ? -Self.hoverTravel : Self.hoverTravel) : 0)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: dockAlignment)
             .padding(settings.edge == .right ? .trailing : .leading, Self.floatGap)
