@@ -1368,8 +1368,8 @@ private struct ItemRow: View {
 // 设计（方案定稿 A「悬浮芯片」）：收起态是一件「小物件」而非一条高条——
 // 44×100 的玻璃芯片与停靠边留 3pt 悬浮缝、自带投影，像贴在屏幕边的便签夹。
 // 内容自上而下：最新一张缩略瓷片（里面是什么）、计数（等宽粗体）、
-// 品牌紫状态灯（有内容的呼吸点）。整枚芯片就是按钮；悬停 = 整枚滑出 6pt +
-// 投影加深——纯物理动作，不加任何描边（用户定稿）。空态换成虚线描边 + 托盘图形。
+// 品牌紫状态灯（有内容的呼吸点）。整枚芯片就是按钮；芯片不带任何描边（用户定稿），
+// 边界感完全由投影承担；悬停 = 整枚滑出 6pt + 投影加深——纯物理动作。空态换托盘图形。
 
 private struct CollapsedTabView: View {
     @ObservedObject var store: ShelfStore
@@ -1422,17 +1422,6 @@ private struct CollapsedTabView: View {
             .background(
                 chipShape.fill(settings.material.material)
             )
-            .overlay {
-                // 静息发丝描边：结构恒定（空态虚线示「空槽」、常态实线），不随悬停变化——
-                // 悬停不加任何描边（用户定稿），反馈只靠滑出 + 投影的物理动作
-                chipShape.strokeBorder(
-                    Color.primary.opacity(peekItems.isEmpty ? 0.16 : 0.10),
-                    style: peekItems.isEmpty
-                        ? StrokeStyle(lineWidth: 1, dash: [3, 3])
-                        : StrokeStyle(lineWidth: 1)
-                )
-                .allowsHitTesting(false)
-            }
             .overlay {
                 // 拖拽悬停的接收罩染
                 chipShape
@@ -1497,7 +1486,7 @@ private struct CollapsedTabView: View {
         }
     }
 
-    /// 空态：托盘图形居中（描边由 body 按空态切虚线）
+    /// 空态：托盘图形居中
     private var emptyChip: some View {
         Image(systemName: "tray")
             .font(.system(size: 16, weight: .medium))
