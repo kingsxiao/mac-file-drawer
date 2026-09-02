@@ -135,9 +135,9 @@ final class AppSettingsTests: XCTestCase {
                 accuracy: 0.01
             )
 
-            // 收起边条：46 宽、垂直居中、贴右缘
+            // 收起态：54 宽（芯片+悬浮缝+外探行程）、垂直居中、贴右缘
             let collapsed = DrawerLayout.collapsedFrame(visibleFrame: vf, settings: s)
-            XCTAssertEqual(collapsed.width, 46, accuracy: 0.01)
+            XCTAssertEqual(collapsed.width, 54, accuracy: 0.01)
             XCTAssertEqual(collapsed.maxX, vf.maxX, accuracy: 0.01)
             XCTAssertEqual(collapsed.midY, vf.midY, accuracy: 0.01)
 
@@ -287,8 +287,8 @@ final class AppSettingsTests: XCTestCase {
             // 贴 A 右缘的展开抽屉
             let expandedOnA = NSRect(x: 1590, y: 40, width: 330, height: 1000)
             XCTAssertEqual(DrawerLayout.homeScreenIndex(of: expandedOnA, screenFrames: frames), 0)
-            // 贴 B 右缘的收起边条（B 右缘 x=3000）
-            let tabOnB = NSRect(x: 2954, y: 862, width: 46, height: 196)
+            // 贴 B 右缘的收起芯片窗口（B 右缘 x=3000）
+            let tabOnB = NSRect(x: 2946, y: 908, width: 54, height: 104)
             XCTAssertEqual(DrawerLayout.homeScreenIndex(of: tabOnB, screenFrames: frames), 1)
             // 贴 C 左缘的展开抽屉（负坐标屏）
             let expandedOnC = NSRect(x: -1440, y: 50, width: 330, height: 800)

@@ -10,7 +10,9 @@ enum DrawerLayout {
     /// 高度比例 = 1.0 时的上下呼吸边距
     static let margin: CGFloat = 24
     static let minDrawerHeight: CGFloat = 360
-    static let collapsedTabSize = CGSize(width: 46, height: 196)
+    /// 收起态窗口总尺寸：芯片 44×96 + 贴边悬浮缝 3 + 悬停外探行程 6 + 余量
+    /// （窗口比芯片大：芯片在窗口内贴停靠边浮着，边缘外探不越窗）
+    static let collapsedTabSize = CGSize(width: 54, height: 104)
     /// 无屏（headless 启动 / 显示器全部断开）时的兜底可视区：
     /// 仅为让初始化完整走通（菜单栏图标、热键、屏幕变化监听先就位），
     /// 显示器接入后 didChangeScreenParameters 会立即重新定位。

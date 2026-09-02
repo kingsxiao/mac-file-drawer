@@ -1364,49 +1364,44 @@ private struct ItemRow: View {
     }
 }
 
-// MARK: - 收起态：贴屏幕边缘的窄边条，点击展开；拖文件上去自动展开接收
-// 设计：上段「内容组」——纸叠透出最近几条的缩略瓷片，计数徽章紧挨其下（里面是什么）；
-// 下段「握把」——与展开态拉手同一套胶囊语言的单一拉手（怎么打开）。
-// 悬停只点亮握把：整条上只有它在动，是唯一的锚点；边条本体贴边不动。
+// MARK: - 收起态：贴屏幕边缘的悬浮芯片，点击展开；拖文件上去自动展开接收
+// 设计（方案定稿 A「悬浮芯片」）：收起态是一件「小物件」而非一条高条——
+// 44×100 的玻璃芯片与停靠边留 3pt 悬浮缝、自带投影，像贴在屏幕边的便签夹。
+// 内容自上而下：最新一张缩略瓷片（里面是什么）、计数（等宽粗体）、
+// 品牌紫状态灯（有内容的呼吸点）。整枚芯片就是按钮；悬停 = 整枚滑出 6pt +
+// 投影加深 + 品牌紫描边——一个动作一个焦点。空态换成虚线描边 + 托盘图形。
 
 private struct CollapsedTabView: View {
     @ObservedObject var store: ShelfStore
     @ObservedObject var interaction: InteractionModel
-    /// 外部文件拖到边条上时的高亮（自动展开关闭时也要有可见反馈）
+    /// 外部文件拖到芯片上时的高亮（自动展开关闭时也要有可见反馈）
     @Binding var isDropTargeted: Bool
     @ObservedObject private var settings = AppSettings.shared
     @State private var hovered = false
 
-    private static let peekLimit = 3
-    private static let tileSize: CGFloat = 24
+    private static let chipSize = CGSize(width: 44, height: 100)
+    /// 与停靠边之间的悬浮缝：物件感的关键，不贴死
+    private static let floatGap: CGFloat = 3
+    /// 悬停时向屏幕中线的外探行程
+    private static let hoverTravel: CGFloat = 6
 
-    /// 纸叠内容：与展开后看到的顺序一致的前几条
+    /// 透出的最新一条：与展开后看到的第一行一致
     private var peekItems: [ShelfItem] {
         Array(interaction.displayItems(
             from: store.currentItems,
             sort: interaction.sortMode(for: store.currentDrawerID)
-        ).prefix(Self.peekLimit))
+        ).prefix(1))
     }
 
     private var peekItemIDs: [UUID] { peekItems.map(\.id) }
 
-    private var tabShape: UnevenRoundedRectangle {
-        let radius: CGFloat = 18
-        return settings.edge == .right
-            ? UnevenRoundedRectangle(
-                topLeadingRadius: radius,
-                bottomLeadingRadius: radius,
-                bottomTrailingRadius: 0,
-                topTrailingRadius: 0,
-                style: .continuous
-            )
-            : UnevenRoundedRectangle(
-                topLeadingRadius: 0,
-                bottomLeadingRadius: 0,
-                bottomTrailingRadius: radius,
-                topTrailingRadius: radius,
-                style: .continuous
-            )
+    private var chipShape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: 14, style: .continuous)
+    }
+
+    /// 芯片在窗口内的停靠对齐：贴停靠边、留悬浮缝
+    private var dockAlignment: Alignment {
+        settings.edge == .right ? .trailing : .leading
     }
 
     var body: some View {
@@ -1416,58 +1411,62 @@ private struct CollapsedTabView: View {
                 interaction.isCollapsed = false
             }
         } label: {
-            ZStack {
-                tabShape
-                    .fill(settings.material.material)
-                    // 贴边对侧的高光：描边 + 水平渐变（亮在开口侧、向屏幕边缘消失），
-                    // 描边路径天然跟随圆角，不会像直线那样戳出弧线
-                    .overlay {
-                        tabShape.strokeBorder(
-                            LinearGradient(
-                                stops: [
-                                    .init(color: Color.primary.opacity(hovered ? 0.5 : 0.32), location: 0),
-                                    .init(color: Color.primary.opacity(hovered ? 0.18 : 0.10), location: 0.10),
-                                    .init(color: .clear, location: 0.30),
-                                ],
-                                startPoint: settings.edge == .right ? .leading : .trailing,
-                                endPoint: settings.edge == .right ? .trailing : .leading
-                            ),
-                            lineWidth: 1
-                        )
-                        .allowsHitTesting(false)
-                    }
-                    .overlay {
-                        // 拖拽悬停的接收罩染（鼠标悬停不罩染，反馈集中给握把）
-                        tabShape
-                            .fill(DrawerTheme.accent.opacity(isDropTargeted ? 0.14 : 0))
-                            .allowsHitTesting(false)
-                    }
-                    .overlay {
-                        // 拖拽悬停：实线接收描边
-                        if isDropTargeted {
-                            tabShape.strokeBorder(DrawerTheme.accent.opacity(0.7), lineWidth: 1.5)
-                                .allowsHitTesting(false)
-                        }
-                    }
-
-                VStack(spacing: 14) {
-                    if peekItems.isEmpty {
-                        emptySlot
-                    } else {
-                        // 内容组：纸叠与计数是同一件事的两面，紧挨着
-                        VStack(spacing: 5) {
-                            peekStack
-                            countBadge
-                        }
-                    }
-                    pullHandle
+            Group {
+                if peekItems.isEmpty {
+                    emptyChip
+                } else {
+                    chipContent
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .contentShape(tabShape)
+            .frame(width: Self.chipSize.width, height: Self.chipSize.height)
+            .background(
+                chipShape.fill(settings.material.material)
+            )
+            .overlay {
+                // 静息发丝描边：结构恒定（空态虚线示「空槽」、常态实线），不随悬停换样式——
+                // StrokeStyle 不可动画，虚线⇄实线切换会整层闪跳
+                chipShape.strokeBorder(
+                    Color.primary.opacity(peekItems.isEmpty ? 0.16 : 0.10),
+                    style: peekItems.isEmpty
+                        ? StrokeStyle(lineWidth: 1, dash: [3, 3])
+                        : StrokeStyle(lineWidth: 1)
+                )
+                .allowsHitTesting(false)
+            }
+            .overlay {
+                // 悬停光环：颜色与结构恒定、只动画透明度——避开动态色跨色插值
+                // （品牌紫是 NSColor provider 包装色，与灰互插会闪帧）；2pt 在小芯片上更稳
+                chipShape.strokeBorder(DrawerTheme.accent, lineWidth: 2)
+                    .opacity(hovered ? 0.45 : 0)
+                    .allowsHitTesting(false)
+            }
+            .overlay {
+                // 拖拽悬停的接收罩染
+                chipShape
+                    .fill(DrawerTheme.accent.opacity(isDropTargeted ? 0.16 : 0))
+                    .allowsHitTesting(false)
+            }
+            .overlay {
+                // 拖拽悬停：实线接收描边
+                if isDropTargeted {
+                    chipShape.strokeBorder(DrawerTheme.accent.opacity(0.7), lineWidth: 1.5)
+                        .allowsHitTesting(false)
+                }
+            }
+            .contentShape(chipShape)
+            // 悬浮物件的投影：静息贴墙浅影，悬停加深外扩（「被拿起来」）。
+            // x 恒为 0——横向偏移会让阴影缘爬过 1pt 描边，看起来像边框脏了
+            .shadow(
+                color: .black.opacity(hovered ? 0.24 : 0.14),
+                radius: hovered ? 10 : 6,
+                y: hovered ? 4 : 2
+            )
+            .offset(x: hovered ? (settings.edge == .right ? -Self.hoverTravel : Self.hoverTravel) : 0)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: dockAlignment)
+            .padding(settings.edge == .right ? .trailing : .leading, Self.floatGap)
         }
         .buttonStyle(TabEdgePressStyle(edge: settings.edge))
-        .iconHoverState($hovered)
+        .iconHoverState($hovered, animation: DrawerMotion.snap)
         // 手型光标持续保障：面板为 key 窗口时，AppKit 会在每次 mouseMoved 按窗口
         // cursor rect 把光标重置回箭头，onHover 只在进出时设置一次会被冲掉——
         // 连续悬停在每次移动时重新按下手型，离开（.ended）时复原箭头
@@ -1484,111 +1483,50 @@ private struct CollapsedTabView: View {
         .accessibilityLabel(L10n.t("展开抽屉"))
     }
 
-    /// 纸叠：顶层是最新条目的内容瓷片；下两层是不透明的「纸卡」——
-    /// 实底 + 细描边、同尺寸不缩小，只露出上缘，像真实纸叠的纸边
-    /// （半透明缩小层在小尺寸下只会糊成一片灰影）。
-    /// 层距与描边恒定：悬停的全部戏份留给握把，纸叠只做静物。
-    private var peekStack: some View {
-        ZStack {
-            // 深层先画，顶层后画盖在上面
-            ForEach(Array(peekItems.enumerated().reversed()), id: \.element.id) { index, item in
-                let depth = CGFloat(index)
-                Group {
-                    if index == 0 {
-                        FileTile(item: item, thumbs: store.thumbs, size: Self.tileSize)
-                    } else {
-                        paperCard
-                    }
-                }
-                .overlay(
-                    RoundedRectangle(cornerRadius: Self.tileSize * 0.27, style: .continuous)
-                        .strokeBorder(Color.primary.opacity(depth == 0 ? 0.20 : 0.18), lineWidth: 0.6)
-                )
-                .offset(y: -depth * 5.5)
-                .shadow(
-                    color: .black.opacity(index == 0 ? 0.22 : 0.10),
-                    radius: index == 0 ? 2.5 : 2, y: 1.5
-                )
-            }
+    /// 芯片内容：最新一张缩略瓷片 + 计数 + 状态灯，纵列居中
+    private var chipContent: some View {
+        VStack(spacing: 0) {
+            FileTile(item: peekItems[0], thumbs: store.thumbs, size: 32)
+                .padding(.top, 12)
+            Text("\(store.currentItems.count)")
+                .font(.system(size: 14, weight: .bold, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(Color.primary.opacity(0.8))
+                .padding(.top, 8)
+                .contentTransition(.numericText())
+                .animation(DrawerMotion.bouncy, value: store.currentItems.count)
+            // 状态灯：品牌紫的小呼吸点，是芯片里唯一的彩色元素
+            Circle()
+                .fill(DrawerTheme.accent.opacity(hovered ? 1 : 0.85))
+                .frame(width: 5, height: 5)
+                .padding(.top, 8)
+                .padding(.bottom, 12)
         }
     }
 
-    /// 纸卡：不透明的「一张纸」，只在层间露出边缘。
-    /// 必须定死尺寸：fill 形状会吞掉提议尺寸（整个边条宽 × 剩余高），把 VStack 撑散。
-    private var paperCard: some View {
-        RoundedRectangle(cornerRadius: Self.tileSize * 0.27, style: .continuous)
-            .fill(Color.primary.opacity(0.08))
-            .frame(width: Self.tileSize, height: Self.tileSize)
+    /// 空态：托盘图形居中（描边由 body 按空态切虚线）
+    private var emptyChip: some View {
+        Image(systemName: "tray")
+            .font(.system(size: 16, weight: .medium))
+            .foregroundStyle(.secondary.opacity(0.75))
     }
 
-    /// 握把：与展开态拉手同一套胶囊语言——中性灰底板 + 发丝描边，
-    /// 静息即品牌紫的 chevron 指向屏幕中线（深浅两种玻璃上都读得清），
-    /// 悬停时底板点亮、描边转紫、chevron 微微放大外探——与展开态拉手同构。
-    /// 它是整个边条悬停时唯一运动的元素，一眼锁定「拉这里」。
-    private var pullHandle: some View {
-        Image(systemName: settings.edge == .right ? "chevron.left" : "chevron.right")
-            .font(.system(size: 13, weight: .semibold))
-            .foregroundStyle(DrawerTheme.accent.opacity(hovered ? 1 : 0.78))
-            .scaleEffect(hovered ? 1.14 : 1)
-            .offset(x: hovered ? (settings.edge == .right ? -1.5 : 1.5) : 0)
-            .frame(width: 28, height: 46)
-            .background(
-                // 胶囊底板：与展开态拉手同规格的「握把」
-                Capsule().fill(Color.primary.opacity(hovered ? 0.12 : 0.07))
-            )
-            .overlay(
-                Capsule().strokeBorder(
-                    hovered ? DrawerTheme.accent.opacity(0.35) : Color.primary.opacity(0.11),
-                    lineWidth: 1
-                )
-            )
-    }
-
-    /// 计数徽章：品牌渐变胶囊，与撤销 toast 的按钮同一视觉语言
-    private var countBadge: some View {
-        Text("\(store.currentItems.count)")
-            .font(.system(size: 10, weight: .bold, design: .rounded))
-            .monospacedDigit()
-            .foregroundStyle(.white)
-            .padding(.horizontal, 5.5)
-            .padding(.vertical, 1.5)
-            .background(Capsule().fill(DrawerTheme.accentGradient))
-            .overlay(Capsule().strokeBorder(.white.opacity(0.22), lineWidth: 0.5))
-            .contentTransition(.numericText())
-            .animation(DrawerMotion.bouncy, value: store.currentItems.count)
-    }
-
-    /// 空态：虚线纸槽 + 一抹浅浅的托盘图标
-    private var emptySlot: some View {
-        RoundedRectangle(cornerRadius: 7, style: .continuous)
-            .strokeBorder(Color.primary.opacity(0.16), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
-            .frame(width: 26, height: 26)
-            .overlay {
-                Image(systemName: "tray")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.secondary.opacity(0.7))
-            }
-    }
-
-    /// 收起态也会透出缩略图：补齐纸叠条目的解码（未展开时 FileTile 行不会触发）
+    /// 收起态也会透出缩略图：补齐芯片条目的解码（未展开时 FileTile 行不会触发）
     private func loadPeekThumbs() {
         for item in peekItems { store.ensureThumb(for: item) }
     }
 }
 
-/// 收起边条的按压样式：向停靠边收缩、贴边不动的那一侧锚定——
-/// 像把抽屉往墙里推了一下，松手弹开；换来 Button 本体后 VoiceOver /
-/// System Events 也能 AXPress（旧 onTapGesture 手势控件按不了）
+/// 收起芯片的按压样式：向停靠边推回（合上悬浮缝）+ 轻缩——
+/// 像把小物件按回墙上，松手弹开；真 Button 本体让 VoiceOver /
+/// System Events 可 AXPress（旧 onTapGesture 手势控件按不了）
 private struct TabEdgePressStyle: ButtonStyle {
     let edge: DrawerEdge
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .scaleEffect(
-                x: configuration.isPressed ? 0.88 : 1,
-                y: configuration.isPressed ? 0.98 : 1,
-                anchor: edge == .right ? .trailing : .leading
-            )
+            .scaleEffect(configuration.isPressed ? 0.96 : 1)
+            .offset(x: configuration.isPressed ? (edge == .right ? 3 : -3) : 0)
             .animation(.spring(response: 0.22, dampingFraction: 0.6), value: configuration.isPressed)
     }
 }
