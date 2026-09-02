@@ -30,13 +30,15 @@ final class InteractionModel: ObservableObject {
             }
         }
 
+        /// 排序模式的专属符号（排序按钮 / 菜单项共用）。
+        /// 注意避开 textformat 系符号：中文环境会渲染成汉字。
         var symbol: String {
             switch self {
-            case .timeNewestFirst: return "arrow.down"
-            case .timeOldestFirst: return "arrow.up"
-            case .nameAscending:   return "textformat.abc"
+            case .timeNewestFirst: return "clock.arrow.circlepath"
+            case .timeOldestFirst: return "hourglass"
+            case .nameAscending:   return "abc"
             case .kindThenName:    return "square.grid.2x2"
-            case .manual:          return "hand.raised"
+            case .manual:          return "line.3.horizontal"
             }
         }
     }

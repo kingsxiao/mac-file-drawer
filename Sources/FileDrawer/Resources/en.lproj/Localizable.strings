@@ -293,3 +293,7 @@
 /* 批次61：L10n 覆盖度审计补齐 */
 "%d 个项目" = "%d items";
 "当前 %d 个条目 · %d 个分组" = "%d items · %d groups";
+
+/* 批次62：UI 打磨（2026-09 设计稿 docs/ui-optimization-design-2026-09.md） */
+"清空搜索词" = "Clear Search Text";
+"搜索匹配数 / 分组总数" = "Matches / total items in group";

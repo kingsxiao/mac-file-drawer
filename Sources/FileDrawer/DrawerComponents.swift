@@ -106,6 +106,8 @@ struct SearchBarView: View {
             }
 
             if !interaction.searchText.isEmpty {
+                // 胶囊内唯一的 X：清空文本。关闭搜索走 Esc 或再点头部放大镜——
+                // 两个 X 比邻（清空 / 关闭）语义易混，关闭按钮已收敛到头部
                 Button {
                     withAnimation(.easeOut(duration: 0.15)) { interaction.searchText = "" }
                 } label: {
@@ -115,12 +117,8 @@ struct SearchBarView: View {
                 }
                 .buttonStyle(PressScaleStyle(scale: 0.8))
                 .transition(.scale.combined(with: .opacity))
-            }
-
-            HoverCircleButton(systemImage: "xmark", tip: L10n.t("关闭搜索"), size: 18) {
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
-                    interaction.clearSearchAndHideIfNeeded()
-                }
+                .help(L10n.t("清空搜索词"))
+                .accessibilityLabel(L10n.t("清空搜索词"))
             }
         }
         .padding(.horizontal, 10)
@@ -348,15 +346,29 @@ struct PreviewOverlayView: View {
     }
 
     private var footerHints: some View {
-        HStack(spacing: 9) {
-            hintChip(key: "Space", label: L10n.t("关闭"))
-            hintChip(key: "↑ ↓", label: L10n.t("切换"))
-            hintChip(key: "⏎", label: L10n.t("打开"))
-            Spacer(minLength: 0)
+        HStack(spacing: 0) {
+            // 键盘提示成组居左
+            HStack(spacing: 9) {
+                hintChip(key: "Space", label: L10n.t("关闭"))
+                hintChip(key: "↑ ↓", label: L10n.t("切换"))
+                hintChip(key: "⏎", label: L10n.t("打开"))
+            }
+            .fixedSize()
+
+            Spacer(minLength: 8)
+
+            // 元信息居右，与提示组之间用发丝竖线分界——两组信息各归其位
+            Capsule()
+                .fill(Color.primary.opacity(0.14))
+                .frame(width: 1, height: 10)
+                .fixedSize()
+
             Text(item.metaLine)
                 .font(.system(size: 10))
                 .foregroundStyle(.tertiary)
                 .lineLimit(1)
+                .truncationMode(.middle)
+                .padding(.leading, 8)
         }
         .padding(.horizontal, 11)
         .padding(.vertical, 7)

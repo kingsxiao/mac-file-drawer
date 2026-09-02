@@ -134,7 +134,11 @@ struct ContentView: View {
             drawerHandle
 
             VStack(spacing: 0) {
-                HeaderView(store: store, interaction: interaction)
+                HeaderView(
+                    store: store,
+                    interaction: interaction,
+                    displayedCount: displayedItems.count
+                )
 
                 if interaction.isSearchVisible || !interaction.searchText.isEmpty {
                     SearchBarView(interaction: interaction, focused: $searchFocused)
@@ -340,6 +344,16 @@ struct ContentView: View {
             ScrollView {
                 LazyVStack(spacing: settings.compactRows ? 5 : 7) {
                     ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                        // 置顶区与非置顶区的分界线（两区都非空才出现）：
+                        // 图钉角标表义「哪些是置顶」，分隔线回答「边界在哪」
+                        if index > 0, items[index - 1].pinned, !item.pinned {
+                            Rectangle()
+                                .fill(Color.primary.opacity(0.16))
+                                .frame(height: 1)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 1)
+                                .allowsHitTesting(false)
+                        }
                         ItemRow(
                             item: item,
                             store: store,
@@ -365,9 +379,15 @@ struct ContentView: View {
                     }
                 }
                 .padding(.top, settings.compactRows ? 7 : 9)
-                .padding(.bottom, 12)
+                // toast 悬浮期间列表底部让位：最后一行不再被撤销 / 轻提示盖住
+                .padding(.bottom, store.undoSnapshot != nil || store.notice != nil ? 64 : 12)
             }
             .scrollBounceBehavior(.basedOnSize)
+            // 拖入悬停：列表内容退后（描边与「松开」徽章上前）——「内容让位给新文件」。
+            // 空态不在此路径（有自己的 targeted 表现）
+            .opacity(isDropTargeted ? 0.55 : 1)
+            .scaleEffect(isDropTargeted ? 0.985 : 1)
+            .animation(.easeOut(duration: 0.14), value: isDropTargeted)
             // 键盘 ↑↓ 移动选中时，选中行平滑滚入视野
             .onChange(of: interaction.selectedID) {
                 guard let id = interaction.selectedID else { return }
@@ -513,6 +533,8 @@ private struct DrawerDropDelegate: DropDelegate {
 private struct HeaderView: View {
     @ObservedObject var store: ShelfStore
     @ObservedObject var interaction: InteractionModel
+    /// 当前展示条目数（搜索过滤后）：搜索时作匹配计数展示
+    var displayedCount: Int = 0
     @State private var sortHovered = false
     // 分组管理弹窗
     @State private var newDrawerVisible = false
@@ -522,32 +544,11 @@ private struct HeaderView: View {
 
     var body: some View {
         HStack(spacing: 7) {
-            Image(systemName: "tray.full")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(.primary)
-                .frame(width: 28, height: 28)
-                .background(
-                    RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .fill(Color.primary.opacity(0.08))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .strokeBorder(Color.primary.opacity(0.15), lineWidth: 0.8)
-                )
+            brandTile
 
             drawerMenu
 
-            if !store.currentItems.isEmpty {
-                Text("\(store.currentItems.count)")
-                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                    .monospacedDigit()
-                    .contentTransition(.numericText())
-                    .foregroundStyle(.primary)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(Capsule().fill(Color.primary.opacity(0.10)))
-                    .transition(.scale(scale: 0.6).combined(with: .opacity))
-            }
+            countFootnote
 
             if interaction.selectedIDs.count > 1 {
                 Text(L10n.tf("已选 %d", interaction.selectedIDs.count))
@@ -573,7 +574,12 @@ private struct HeaderView: View {
                     tint: interaction.isSearchVisible ? DrawerTheme.accent : .secondary
                 ) {
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                        interaction.requestSearchFocus()
+                        // toggle：已展开且无文本时点击 = 收起；否则打开 / 聚焦（有文本不清空）
+                        if interaction.isSearchVisible, interaction.searchText.isEmpty {
+                            interaction.clearSearchAndHideIfNeeded()
+                        } else {
+                            interaction.requestSearchFocus()
+                        }
                     }
                 }
                 HoverCircleButton(systemImage: "gearshape", tip: L10n.t("设置（⌘,）"), size: 25) {
@@ -588,6 +594,52 @@ private struct HeaderView: View {
         .animation(DrawerMotion.bouncy, value: store.items.count)
         .animation(DrawerMotion.bouncy, value: interaction.selectedIDs.count)
         .animation(DrawerMotion.bouncy, value: store.currentDrawerID)
+    }
+
+    /// 头部品牌图标：低透明度品牌渐变底 + 品牌色符号，与抽屉顶部光晕同一身份语言
+    private var brandTile: some View {
+        Image(systemName: "tray.full")
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundStyle(DrawerTheme.accent)
+            .frame(width: 28, height: 28)
+            .background(
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                DrawerTheme.accent.opacity(0.18),
+                                DrawerTheme.accentAlt.opacity(0.10),
+                            ],
+                            startPoint: .topLeading, endPoint: .bottomTrailing
+                        )
+                    )
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .strokeBorder(DrawerTheme.accent.opacity(0.22), lineWidth: 0.8)
+            )
+    }
+
+    /// 计数注脚：搜索时是青瓷「匹配/总数」，平时是组名的三级灰注脚（不再独立成胶囊）
+    @ViewBuilder
+    private var countFootnote: some View {
+        let searching = interaction.isSearchVisible && !interaction.searchText.isEmpty
+        if searching {
+            // 匹配计数是「当前视图状态」信号，用选中色系；0 命中也显示（本身是重要信息）
+            Text(L10n.tf("%d/%d", displayedCount, store.currentItems.count))
+                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                .monospacedDigit()
+                .contentTransition(.numericText())
+                .foregroundStyle(DrawerTheme.selection)
+                .help(L10n.t("搜索匹配数 / 分组总数"))
+        } else if !store.currentItems.isEmpty {
+            Text("\(store.currentItems.count)")
+                .font(.system(size: 10, weight: .medium, design: .monospaced))
+                .monospacedDigit()
+                .contentTransition(.numericText())
+                .foregroundStyle(.tertiary)
+                .transition(.scale(scale: 0.6).combined(with: .opacity))
+        }
     }
 
     /// 分组切换器：当前分组名 + 下拉菜单（切换 / 新建 / 重命名 / 删除）
@@ -658,7 +710,8 @@ private struct HeaderView: View {
         }
     }
 
-    /// 排序菜单：设置的是当前分组的独立排序（各组互不影响）
+    /// 排序菜单：设置的是当前分组的独立排序（各组互不影响）。
+    /// 按钮图标 = 当前排序模式的专属符号（切模式即换图标，状态外显）
     private var sortMenu: some View {
         let currentSort = interaction.sortMode(for: store.currentDrawerID)
         return Menu {
@@ -670,16 +723,17 @@ private struct HeaderView: View {
                     // 菜单跟踪期间 onHover 不派发，选中后显式熄灭，避免圆底卡亮
                     withAnimation(DrawerMotion.iconHover) { sortHovered = false }
                 } label: {
+                    // 选中项按 macOS 惯例显示 checkmark，未选中项显示模式符号提升可扫读性
                     if currentSort == mode {
                         Label(mode.label, systemImage: "checkmark")
                     } else {
-                        Text(mode.label)
+                        Label(mode.label, systemImage: mode.symbol)
                     }
                 }
             }
         } label: {
             // 与 HoverCircleButton 同一套视觉语言：中性圆底 + 图标轻放大
-            Image(systemName: "arrow.up.arrow.down")
+            Image(systemName: currentSort.symbol)
                 .font(.system(size: 25 * 0.46, weight: .medium))
                 .foregroundStyle(sortHovered ? Color.primary : Color.secondary)
                 .scaleEffect(sortHovered ? 1.1 : 1)
@@ -688,6 +742,10 @@ private struct HeaderView: View {
                     Circle().fill(Color.primary.opacity(sortHovered ? 0.09 : 0))
                 )
                 .contentShape(Circle())
+                .contentTransition(.symbolEffect(.replace))
+                // Menu 的 a11y 元素有时会改暴露 label 内图片的自动描述
+                // （"Clock With A Circular Arrow"），给图标本身也钉上语义标签兜底
+                .accessibilityLabel(L10n.t("排序（仅当前分组）"))
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
@@ -737,7 +795,7 @@ private struct ItemRow: View {
 
             Spacer(minLength: 4)
 
-            HStack(spacing: 1) {
+            HStack(spacing: 4) {
                 rowAction("folder", L10n.t("在访达中显示"), delay: 0) {
                     NSWorkspace.shared.activateFileViewerSelecting([item.url])
                 }
@@ -974,15 +1032,16 @@ private struct ItemRow: View {
             .overlay(alignment: .topLeading) {
                 if item.pinned {
                     // 置顶角标：品牌色小图钉，压在瓷片左上角。
-                    // 三项尺寸随瓷片等比（42pt 为基准），32pt 紧凑瓷片上不再盖住近半张缩略图
+                    // 三项尺寸随瓷片等比（42pt 为基准）；8.5pt 让角标从「隐约可见」
+                    // 到「一眼可辨」，32pt 紧凑瓷片上也不盖住近半张缩略图
                     let k = tileSize / 42
                     Image(systemName: "pin.fill")
-                        .font(.system(size: 7 * k, weight: .bold))
+                        .font(.system(size: 8.5 * k, weight: .bold))
                         .foregroundStyle(.white)
-                        .padding(3 * k)
+                        .padding(3.5 * k)
                         .background(Circle().fill(DrawerTheme.accentGradient))
                         .overlay(Circle().strokeBorder(.white.opacity(0.45), lineWidth: 0.6))
-                        .offset(x: -3 * k, y: -3 * k)
+                        .offset(x: -3.5 * k, y: -3.5 * k)
                         .help(L10n.t("已置顶 · 免于自动清理"))
                 }
             }
