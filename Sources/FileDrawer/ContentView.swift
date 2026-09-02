@@ -570,8 +570,9 @@ private struct HeaderView: View {
                     systemImage: "magnifyingglass",
                     tip: L10n.t("搜索（⌘F）"),
                     size: 25,
-                    // 搜索面板打开时常亮品牌色作状态标记；悬停反馈与其他图标一致（中性）
-                    tint: interaction.isSearchVisible ? DrawerTheme.accent : .secondary
+                    // 搜索面板打开时常亮 primary 作状态标记（中性，不用品牌色）；
+                    // 悬停反馈与其他图标一致
+                    tint: interaction.isSearchVisible ? Color.primary : .secondary
                 ) {
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                         // toggle：已展开且无文本时点击 = 收起；否则打开 / 聚焦（有文本不清空）
@@ -585,9 +586,8 @@ private struct HeaderView: View {
                 HoverCircleButton(systemImage: "gearshape", tip: L10n.t("设置（⌘,）"), size: 25) {
                     SettingsWindowManager.shared.show()
                 }
-                HoverCircleButton(systemImage: "arrow.right.to.line", tip: L10n.t("收起成边条"), size: 25) {
-                    NotificationCenter.default.post(name: .toggleDrawer, object: nil)
-                }
+                // 收起不设头部按钮：与左缘拉手重复（用户定稿）——
+                // 收起路径 = 拉手 / 菜单栏 / 全局热键
             }
         }
         .padding(.vertical, 11)
@@ -596,27 +596,20 @@ private struct HeaderView: View {
         .animation(DrawerMotion.bouncy, value: store.currentDrawerID)
     }
 
-    /// 头部品牌图标：低透明度品牌渐变底 + 品牌色符号，与抽屉顶部光晕同一身份语言
+    /// 头部图标：中性灰底瓷片（用户定稿：图标不用品牌色——
+    /// 紫色留给拖放反馈 / 置顶角标等瞬态或角标场景，头部保持安静）
     private var brandTile: some View {
         Image(systemName: "tray.full")
             .font(.system(size: 14, weight: .semibold))
-            .foregroundStyle(DrawerTheme.accent)
+            .foregroundStyle(.primary)
             .frame(width: 28, height: 28)
             .background(
                 RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                DrawerTheme.accent.opacity(0.18),
-                                DrawerTheme.accentAlt.opacity(0.10),
-                            ],
-                            startPoint: .topLeading, endPoint: .bottomTrailing
-                        )
-                    )
+                    .fill(Color.primary.opacity(0.08))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .strokeBorder(DrawerTheme.accent.opacity(0.22), lineWidth: 0.8)
+                    .strokeBorder(Color.primary.opacity(0.15), lineWidth: 0.8)
             )
     }
 

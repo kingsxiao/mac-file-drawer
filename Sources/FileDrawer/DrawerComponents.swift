@@ -89,7 +89,7 @@ struct SearchBarView: View {
         HStack(spacing: 7) {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(focused.wrappedValue ? DrawerTheme.accent : .secondary)
+                .foregroundStyle(focused.wrappedValue ? Color.primary : .secondary)
                 .scaleEffect(focused.wrappedValue ? 1.08 : 1)
 
             ZStack(alignment: .leading) {
@@ -129,15 +129,12 @@ struct SearchBarView: View {
                 .overlay(
                     Capsule(style: .continuous)
                         .strokeBorder(
-                            focused.wrappedValue ? DrawerTheme.accent.opacity(0.55) : Color.primary.opacity(0.07),
+                            // 聚焦态用中性石墨描边（不用品牌色）：搜索 UI 全程无彩色，
+                            // 焦点感来自描边加重 + 输入光标，不做外发光
+                            focused.wrappedValue ? Color.primary.opacity(0.30) : Color.primary.opacity(0.07),
                             lineWidth: 1
                         )
                 )
-        )
-        // 聚焦时品牌色外发光，视线自然落到输入区
-        .shadow(
-            color: focused.wrappedValue ? DrawerTheme.accent.opacity(0.28) : .clear,
-            radius: 6
         )
         .animation(.easeOut(duration: 0.18), value: focused.wrappedValue)
         .focused(focused)
