@@ -12,6 +12,30 @@
 
 > **English**: File Drawer is a minimal macOS utility — a translucent drawer that slides out from the screen edge, so you can stash files & folders at hand and drag them out when needed. Swift + AppKit + SwiftUI, zero third-party dependencies. Full documentation below is in Chinese.
 
+## 界面预览
+
+<p align="center">
+  <img src="docs/screenshots/light.png" width="400" alt="File Drawer 展开态：分组徽章、置顶图钉、真实缩略图与着色瓷片">
+</p>
+<p align="center"><sub>展开的抽屉：头部分组切换与计数 · 置顶区（图钉角标）· 图片 / 视频 / PDF 真实缩略图 · 其余类型着色瓷片</sub></p>
+
+<table>
+  <tr>
+    <td align="center">
+      <img src="docs/screenshots/search.png" width="340" alt="搜索 kind:图片 类型过滤"><br>
+      <sub>搜索 <code>kind:图片</code>：类型语法过滤<br>＋ 青瓷 <code>2/10</code> 匹配计数</sub>
+    </td>
+    <td align="center">
+      <img src="docs/screenshots/dark.png" width="340" alt="深色外观"><br>
+      <sub>深色外观：玻璃与品牌色<br>整体自适应提亮一档</sub>
+    </td>
+    <td align="center">
+      <img src="docs/screenshots/collapsed-chip.png" width="132" alt="收起成悬浮芯片"><br>
+      <sub>收起成贴边悬浮芯片：<br>最新缩略图 ＋ 计数 ＋ 呼吸点</sub>
+    </td>
+  </tr>
+</table>
+
 ## 下载安装
 
 从 [**Releases**](https://github.com/kingsxiao/mac-file-drawer/releases) 下载 DMG
@@ -27,7 +51,7 @@ Gatekeeper 拦截：在访达里**右键 → 打开**放行（详见[「分发�
 视觉语言以「玻璃 + 靛紫身份色」为核心，克制但有辨识度：
 
 - **身份色**：全 app 统一的靛紫渐变，集中定义在 `DrawerTheme`——
-  拖放反馈、置顶图钉角标、收起边条把手与计数徽章、搜索命中高亮全部从同一套
+  拖放反馈、置顶图钉角标、收起芯片与计数徽章、搜索命中高亮全部从同一套
   token 取色，刻意避开系统蓝，让抽屉一眼可辨；品牌色随明暗外观自适应（深色
   模式整体提亮一档，保证毛玻璃上的可读性）。紫色只出现在瞬态反馈与角标场景，
   头部图标、搜索胶囊等常驻控件保持中性石墨，选中态用独立的青瓷色系。
@@ -89,8 +113,8 @@ Gatekeeper 拦截：在访达里**右键 → 打开**放行（详见[「分发�
   中英文别名均可，多个 kind 取并集）；名称没命中时用 **Spotlight 检索文件内容**
   补充结果（标注「内容匹配」，可在设置关闭）；排序支持「最近加入 / 最早加入 /
   名称 A–Z / 类型分组 / 手动顺序」，每组各自记忆，排序按钮图标即当前模式。
-- 🚪 **收起成边条**：点左缘拉手把抽屉缩成贴右缘的 42×190 窄边条（毛玻璃竖条 + 托盘图标 + 计数），
-  点击边条展开；直接把文件拖到边条上会自动展开接住。菜单栏菜单同样可切换。
+- 🚪 **收起成悬浮芯片**：点拉手把抽屉缩成贴屏幕边缘的玻璃「悬浮芯片」（最新一张缩略瓷片 ＋ 等宽计数徽章 ＋ 品牌色呼吸点），
+  点击展开；直接把文件拖到芯片上会自动展开接住。菜单栏菜单同样可切换。
 - ⚡️ **启动即滑入**：应用启动后抽屉从屏幕右缘平滑抽出（非激活面板，不抢当前焦点）。
 - ⚡ **缩略图磁盘缓存**：图片 / 视频 / PDF 缩略图按「路径 + 修改时间 + 大小」指纹落盘缓存，
   重启不再重复解码（视频抽帧尤其受益），文件被替换后指纹变化自动失效。
