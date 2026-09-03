@@ -95,6 +95,44 @@ final class ClipboardSupportTests: XCTestCase {
         XCTAssertEqual(urls.first?.pathExtension, "webloc")
     }
 
+    /// 「拷贝图像」→ ⌘V：TIFF 图像数据物化成收件箱图片文件
+    @MainActor
+    func testPasteableURLsMaterializesImage() throws {
+        let inbox = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ClipboardTests-Inbox-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: inbox, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: inbox) }
+
+        let board = freshPasteboard()
+        let tiff = Data([0x49, 0x49, 0x2A, 0x00])
+        board.clearContents()
+        board.setData(tiff, forType: .tiff)
+
+        let urls = ClipboardSupport.pasteableURLs(from: board, directory: inbox)
+        XCTAssertEqual(urls.count, 1)
+        XCTAssertEqual(urls.first?.pathExtension, "tiff")
+        XCTAssertEqual(try Data(contentsOf: urls.first!), tiff)
+    }
+
+    /// 图像优先于随行文本：部分应用「拷贝图像」时附带图片地址字符串，用户意图是图
+    @MainActor
+    func testPasteableURLsImageBeatsAccompanyingText() throws {
+        let inbox = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ClipboardTests-Inbox-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: inbox, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: inbox) }
+
+        let board = freshPasteboard()
+        board.clearContents()
+        board.declareTypes([.tiff, .string], owner: nil)
+        board.setData(Data([0x49, 0x49, 0x2A, 0x00]), forType: .tiff)
+        board.setString("https://example.com/photo.jpg", forType: .string)
+
+        let urls = ClipboardSupport.pasteableURLs(from: board, directory: inbox)
+        XCTAssertEqual(urls.count, 1)
+        XCTAssertEqual(urls.first?.pathExtension, "tiff", "应落图像文件而不是 webloc 链接")
+    }
+
     @MainActor
     func testPasteableURLsEmptyClipboardReturnsEmpty() {
         let board = freshPasteboard()

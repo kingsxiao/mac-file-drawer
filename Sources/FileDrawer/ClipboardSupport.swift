@@ -54,7 +54,20 @@ enum ClipboardSupport {
         return trimmed.isEmpty ? nil : trimmed
     }
 
-    /// 粘贴主入口：文件 → 原样入列；文本 / 链接 → 物化成收件箱条目。返回最终入列的 URL。
+    /// 剪贴板里的图像载荷（浏览器 / 预览的「拷贝图像」）：TIFF 是 macOS 拷贝图像的
+    /// 惯用表示，PNG 是部分应用的补充表示。有则返回 (数据, 扩展名)
+    static func imagePayload(from pasteboard: NSPasteboard) -> (data: Data, ext: String)? {
+        if let data = pasteboard.data(forType: .tiff), !data.isEmpty {
+            return (data, "tiff")
+        }
+        if let data = pasteboard.data(forType: .png), !data.isEmpty {
+            return (data, "png")
+        }
+        return nil
+    }
+
+    /// 粘贴主入口：文件 → 原样入列；图像 / 文本 / 链接 → 物化成收件箱条目。返回最终入列的 URL。
+    /// 「拷贝图像」优先于随行文本（部分应用拷贝图像时附带图片地址字符串，用户意图是图）
     @MainActor
     static func pasteableURLs(
         from pasteboard: NSPasteboard = .general,
@@ -62,6 +75,11 @@ enum ClipboardSupport {
     ) -> [URL] {
         let files = fileURLs(from: pasteboard)
         if !files.isEmpty { return files }
+
+        if let image = imagePayload(from: pasteboard),
+           let materialized = InboxStore.materialize(imageData: image.data, ext: image.ext, directory: directory) {
+            return [materialized]
+        }
 
         guard let text = text(from: pasteboard) else { return [] }
         if let link = URL(string: text), ["http", "https"].contains(link.scheme?.lowercased() ?? "") {

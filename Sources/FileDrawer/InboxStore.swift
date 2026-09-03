@@ -154,9 +154,26 @@ enum InboxStore {
 
     // MARK: 拖入载荷识别
 
-    /// 优先文件 URL；否则把文本 / 链接物化成收件箱文件。供拖入与粘贴共用。
+    /// 可接收并物化成收件箱文件的「媒体文件」类型（图像 / 视频 / 音频 / PDF）。
+    /// 显式白名单而不是笼统的 public.data：既覆盖照片（HEIC）、浏览器拖图（TIFF）、
+    /// 附件（PDF）等高频来源，又不会让任意数据型拖拽都把抽屉当成落点。
+    static let receivableFileTypes: [UTType] = [.image, .movie, .audio, .pdf]
+    static let receivableFileTypeIdentifiers = receivableFileTypes.map(\.identifier)
+
+    /// 注册类型是否可物化（按 UTI conformance 判定，具体类型如 public.heic 天然命中）
+    static func isReceivableFileType(_ identifier: String) -> Bool {
+        guard let type = UTType(identifier) else { return false }
+        return receivableFileTypes.contains { type.conforms(to: $0) }
+    }
+
+    /// 优先文件 URL；图像 / 媒体承诺物化进收件箱；否则文本 / 链接物化。供拖入与粘贴共用。
     static func url(fromProvider provider: NSItemProvider, directory: URL = directory) -> URL? {
-        // 访达与绝大多数应用的标准形式（URL 走 _ObjectiveCBridgeable 重载，同步等待结果）
+        let registered = provider.registeredTypeIdentifiers
+
+        // 访达与绝大多数应用的标准形式（URL 走 _ObjectiveCBridgeable 重载，同步等待结果）。
+        // 只把「真实文件」当场返回；网页链接先记下，图像 / 媒体载荷优先于链接物化
+        // （浏览器拖图同时携带图像数据与 URL，用户要的是那张图而不是一个 webloc）
+        var webLink: URL?
         if provider.canLoadObject(ofClass: URL.self) {
             var urlResult: URL?
             let semaphore = DispatchSemaphore(value: 0)
@@ -168,12 +185,27 @@ enum InboxStore {
             if let url = urlResult {
                 if url.isFileURL { return url }
                 if ["http", "https"].contains(url.scheme?.lowercased() ?? "") {
-                    return materialize(url: url, directory: directory)
+                    webLink = url
                 }
             }
         }
-        let registered = provider.registeredTypeIdentifiers
-        // 链接：public.url 的数据表示（URL 字符串或含 URL 键的 plist）
+
+        // 图像载荷：浏览器 / 编辑器拖出的图（数据表示），或照片拖出的承诺图
+        if let imageType = registered.first(where: { UTType($0)?.conforms(to: .image) ?? false }),
+           let file = receiveFile(provider, typeIdentifier: imageType, directory: directory) {
+            return file
+        }
+
+        // 其余媒体文件承诺：照片视频（movie）、音频、PDF 附件等
+        if let fileType = registered.first(where: isReceivableFileType),
+           let file = receiveFile(provider, typeIdentifier: fileType, directory: directory) {
+            return file
+        }
+
+        // 链接：loadObject 拿到的 http(s) URL，或 public.url 的数据表示（URL 字符串 / 含 URL 键的 plist）
+        if let webLink, let materialized = materialize(url: webLink, directory: directory) {
+            return materialized
+        }
         if registered.contains(UTType.url.identifier) {
             var link: URL?
             let semaphore = DispatchSemaphore(value: 0)
@@ -211,5 +243,98 @@ enum InboxStore {
             }
         }
         return nil
+    }
+
+    // MARK: 文件承诺 / 文件表示接收
+
+    /// 把 provider 的图像 / 媒体载荷收进收件箱，返回收件箱内的文件 URL。
+    ///
+    /// 路径一（首选）：`loadFileRepresentation` —— 文件承诺（照片 / 附件）由此履约，
+    /// 仅注册了数据表示的 provider 也会被系统 coerce 成临时文件；交付的 URL 只在
+    /// 回调内有效，必须在回调里立即移动。
+    /// 路径二（兜底）：`loadDataRepresentation` 自写文件（扩展名取注册类型的惯用扩展），
+    /// 覆盖系统不 coerce 的场景。
+    static func receiveFile(
+        _ provider: NSItemProvider,
+        typeIdentifier: String,
+        directory: URL
+    ) -> URL? {
+        let suggestedName = provider.suggestedName
+        var received: URL?
+        let semaphore = DispatchSemaphore(value: 0)
+        _ = provider.loadFileRepresentation(forTypeIdentifier: typeIdentifier) { url, _ in
+            defer { semaphore.signal() }
+            guard let url else { return }
+            received = importDeliveredFile(
+                url,
+                suggestedName: suggestedName,
+                typeIdentifier: typeIdentifier,
+                directory: directory
+            )
+        }
+        _ = semaphore.wait(timeout: .now() + 10)
+
+        if let received { return received }
+
+        var payload: Data?
+        let dataSemaphore = DispatchSemaphore(value: 0)
+        _ = provider.loadDataRepresentation(forTypeIdentifier: typeIdentifier) { data, _ in
+            defer { dataSemaphore.signal() }
+            payload = data
+        }
+        _ = dataSemaphore.wait(timeout: .now() + 3)
+        guard let payload, !payload.isEmpty else { return nil }
+
+        let ext = UTType(typeIdentifier)?.preferredFilenameExtension ?? "dat"
+        let stem = suggestedName
+            .flatMap { sanitize(($0 as NSString).deletingPathExtension, maxLength: 40) }
+            ?? fallbackMediaName(for: typeIdentifier)
+        let target = uniqueChildURL(name: stem, ext: ext, directory: directory)
+        do {
+            try payload.write(to: target, options: .atomic)
+            return target
+        } catch {
+            return nil
+        }
+    }
+
+    /// 把 loadFileRepresentation 交付的（临时）文件移动进收件箱；跨卷等场景退化为拷贝
+    static func importDeliveredFile(
+        _ source: URL,
+        suggestedName: String?,
+        typeIdentifier: String,
+        directory: URL
+    ) -> URL? {
+        let ext = source.pathExtension.isEmpty
+            ? UTType(typeIdentifier)?.preferredFilenameExtension ?? "dat"
+            : source.pathExtension
+        let stem = suggestedName.flatMap { sanitize(($0 as NSString).deletingPathExtension, maxLength: 40) }
+            ?? sanitize((source.lastPathComponent as NSString).deletingPathExtension, maxLength: 40)
+            ?? fallbackMediaName(for: typeIdentifier)
+        let target = uniqueChildURL(name: stem, ext: ext, directory: directory)
+        let fm = FileManager.default
+        if (try? fm.moveItem(at: source, to: target)) != nil { return target }
+        if (try? fm.copyItem(at: source, to: target)) != nil { return target }
+        return nil
+    }
+
+    /// 媒体载荷的兜底名（对应文本侧的「文本片段」/「链接」）
+    static func fallbackMediaName(for typeIdentifier: String) -> String {
+        UTType(typeIdentifier)?.conforms(to: .image) == true ? "图片" : "文件"
+    }
+
+    // MARK: 剪贴板图像
+
+    /// 剪贴板图像数据 → 收件箱 .tiff / .png 文件（浏览器 / 预览「拷贝图像」）
+    @discardableResult
+    static func materialize(imageData: Data, ext: String, directory: URL = directory) -> URL? {
+        guard !imageData.isEmpty else { return nil }
+        let target = uniqueChildURL(name: "图片", ext: ext, directory: directory)
+        do {
+            try imageData.write(to: target, options: .atomic)
+            return target
+        } catch {
+            return nil
+        }
     }
 }

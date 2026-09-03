@@ -36,13 +36,15 @@ extension ShelfItem {
 // MARK: - 拖入：从外部拖拽载荷中取出文件 URL；文本 / 链接物化成收件箱文件
 
 enum DropFileLoader {
-    /// 可接收的载荷类型：文件 URL、链接、纯文本
-    static let typeIdentifiers = [
-        UTType.fileURL.identifier,
-        UTType.url.identifier,
-        UTType.utf8PlainText.identifier,
-        UTType.plainText.identifier,
-    ]
+    /// 可接收的载荷类型：文件 URL、链接、纯文本，以及图像 / 视频 / 音频 / PDF 媒体载荷
+    /// （浏览器拖图给图像数据、照片 / 邮件附件给文件承诺，解析与物化在 InboxStore）
+    static let typeIdentifiers: [String] =
+        [
+            UTType.fileURL.identifier,
+            UTType.url.identifier,
+            UTType.utf8PlainText.identifier,
+            UTType.plainText.identifier,
+        ] + InboxStore.receivableFileTypeIdentifiers
 
     /// 异步解析一批拖拽提供者中的所有文件 URL。
     /// 各 provider 的完成回调可能乱序到达，落位到序号槽位后再输出，保持拖入时的顺序。

@@ -54,6 +54,11 @@ or `make dmg` to roll your own DMG — see [Contributing](CONTRIBUTING.md).
   into a real file in an inbox folder (text → `.txt`, link → `.webloc`); drag out, preview and double-click
   behave exactly like regular files; underlying files are reclaimed after the item is removed and the undo
   window closes. **⌘V paste** works the same, with rich text (RTF from Word / browsers) auto-flattened to plain text.
+- 🖼 **Images & promised files**: drag an image straight out of a web page and the **actual image file**
+  lands in the drawer (not a `.webloc` link — image data wins over the accompanying URL); photos & videos
+  dragged from Photos.app and attachments from Mail arrive as **file promises** and are received into the
+  inbox folder with their original names; other media types (audio / PDF) drop in the same way.
+  **⌘V** pastes a copied image ("Copy Image" in browsers / Preview) as a `.tiff`/`.png` file.
 - ✋ **Drag out to retrieve**: drag an item out of the drawer — dropping on Finder copies the real file;
   mail clients, chat windows and everything else accept it too.
 - 🖱 **Multi-select batches**: **⌘-click** to toggle items, **⇧-click** for ranges, **⌘A** to select all;
@@ -70,10 +75,10 @@ or `make dmg` to roll your own DMG — see [Contributing](CONTRIBUTING.md).
 - 📂 **Open With**: right-click "Open With" submenu lists every app that can open the file (default app first).
 - 🍃 **Menu-bar quick access**: tray menu includes "Recent items" (latest 6, click to open),
   "Export all to folder…" (batch copy, collision suffixes, stale skipped) and
-  "Open inbox folder" (where dragged text/links materialize — searchable in Finder/Spotlight).
+  "Open inbox folder" (where dragged text/links/images materialize — searchable in Finder/Spotlight).
 - 📋 **Clipboard interop**: **⌘C** puts selected items on the clipboard Finder-style (paste anywhere,
   multi-select copies multiple files); **⌘V** pulls files from the clipboard into the drawer, and
-  text/link clipboards materialize into items; context menu offers "Copy file".
+  text/link/image clipboards materialize into items; context menu offers "Copy file".
 - ↩️ **Undoable removals**: after remove / clear / stale-cleanup, a toast at the bottom offers "Put Back"
   to restore items at their original positions, auto-dismissing on timeout; policy-based cleanups stay
   silent; duplicate drops get a "skipped N duplicates" hint.
@@ -207,7 +212,7 @@ asserts store-v3 state, 8/8; also runnable on a clean runner via Actions → CI 
 | --- | --- |
 | Stash | Drag files from Finder into the drawer (lands in current group); or menu-bar icon → "Import files…" |
 | Manage groups | Header group name: switch / create / rename / delete; right-click item → "Move to group" |
-| Stash text/links | Drag a selection / link from any app (saved as .txt / .webloc); or copy, then **⌘V** (rich text auto-flattened) |
+| Stash text/links/images | Drag a selection / link from any app (saved as .txt / .webloc); drag an image from a web page or photos from Photos.app (saved as the real image file); or copy, then **⌘V** (rich text auto-flattened, copied images paste as files) |
 | Retrieve | Drag the card out to Finder / other app windows |
 | Open | Double-click the card (single-click mode in Settings); right-click "Open With" for alternatives |
 | Multi-select | ⌘-click to toggle, ⇧-click for range, ⌘A for all; subsequent actions hit the batch |
@@ -333,7 +338,7 @@ Sources/FileDrawer/
 └── ContentView.swift        # SwiftUI UI (header/group switcher/list/in-list drag/preview/empty state/toast)
 Sources/FileDrawer/Resources/{zh-Hans,en}.lproj/
                              # localization tables (English values; Chinese keys are the originals)
-Tests/FileDrawerTests/       # 212 tests: drag round-trips / multi-select / groups & pins / per-group sort /
+Tests/FileDrawerTests/       # 220 tests: drag round-trips / multi-select / groups & pins / per-group sort /
                              # stale detection / rename / export / cache / search syntax / persistence v3 /
                              # URL & Intents automation / contrast / localization / performance baselines / …
 scripts/smoke_automation.sh  # automation end-to-end smoke (make smoke-automation)
@@ -358,10 +363,14 @@ make_app.sh / install.sh / uninstall.sh / make_dmg.sh / Makefile
 - **Multi-select drag out**: with a multi-selection, a `MultiDragSourceView` layer (`NSDraggingSession`
   source) sits over the tiles, dragging all selected items as multiple `fileURL` pasteboard entries at once
   (×N badge preview); hidden otherwise (`hitTest` ignores it), never disturbing normal interaction.
-- **Drag in**: `.onDrop(of: [.fileURL, .url, .utf8PlainText, .plainText], delegate:)` parses providers one
-  by one (prefers `loadObject(ofClass: URL.self)`, raw-data fallback), batch-inserts with dedup; text/link
-  payloads materialize through `InboxStore` into real inbox files first — sorting, thumbnails, drag-out and
-  QuickLook treat them exactly like ordinary files; rich-text paste goes RTF → plain-text fallback.
+- **Drag in**: `.onDrop(of: [.fileURL, .url, .utf8PlainText, .plainText] + media types (image / movie / audio / pdf))`
+  parses providers one by one (prefers `loadObject(ofClass: URL.self)`, raw-data fallback), batch-inserts with dedup.
+  File URLs are referenced in place; web links and text payloads materialize through `InboxStore` into real inbox
+  files first — and so do **image data** (browser drags: image data wins over the accompanying URL, so you get the
+  picture, not a `.webloc`) and **file promises** (`loadFileRepresentation` receives Photos/Mail-style promised files
+  into the inbox with their original names, with a raw-data fallback for providers the system won't coerce) —
+  sorting, thumbnails, drag-out and QuickLook treat them all like ordinary files; rich-text paste goes RTF →
+  plain-text fallback.
 - **In-list drag reorder**: the grip handle's provider carries a **process-local custom UTType** payload;
   row-level receivers accept only that type (external file drops naturally fall through to the drawer-level
   receiver; dropping outside rows cancels); landing on a row inserts the batch before it and engages manual
