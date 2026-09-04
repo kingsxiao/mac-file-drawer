@@ -1,6 +1,6 @@
 # 文件抽屉 · macOS File Drawer
 
-[English](README.md) | **简体中文**
+[English](README.md) | **简体中文** · [🌐 落地页](https://kingsxiao.github.io/mac-file-drawer/)
 
 [![CI](https://github.com/kingsxiao/mac-file-drawer/actions/workflows/ci.yml/badge.svg)](https://github.com/kingsxiao/mac-file-drawer/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/kingsxiao/mac-file-drawer?include_prereleases&label=%E6%9C%80%E6%96%B0%E7%89%88)](https://github.com/kingsxiao/mac-file-drawer/releases)

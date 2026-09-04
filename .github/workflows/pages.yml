@@ -1,0 +1,49 @@
+name: Deploy Landing Page
+
+# 落地页部署：推送 main 即自动发布 GitHub Pages。
+# 页面源码在 website/index.html（单文件、零依赖）；实机截图不重复入库，
+# 部署时从 docs/screenshots/ 现场拷入 assets/——单一事实来源。
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "website/**"
+      - "docs/screenshots/**"
+      - "docs/social-preview.png"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Deploy to GitHub Pages
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Assemble site
+        run: |
+          mkdir -p website/assets
+          cp docs/screenshots/*.png website/assets/
+          cp docs/social-preview.png website/assets/
+
+      - uses: actions/configure-pages@v6
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: website
+
+      - id: deployment
+        uses: actions/deploy-pages@v5

@@ -6,7 +6,7 @@
 ![Platform](https://img.shields.io/badge/macOS-14%2B-black)
 ![Swift](https://img.shields.io/badge/Swift-5.9-orange)
 
-**English** | [简体中文](README.zh-CN.md)
+**English** | [简体中文](README.zh-CN.md) · [🌐 Landing page](https://kingsxiao.github.io/mac-file-drawer/)
 
 FileDrawer is a minimal macOS utility: a translucent **drawer** that slides out from the edge of your screen. Stash files & folders at hand while you work, drag them out when you need them — like Yoink or Dropover, but **native, free, and open source**.
 
