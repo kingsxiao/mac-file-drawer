@@ -9,3 +9,6 @@ build/
 .DS_Store
 
 .idea
+
+# Playwright MCP 浏览器快照（本地验证产物，勿入库）
+.playwright-mcp/
