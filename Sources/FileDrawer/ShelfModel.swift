@@ -300,6 +300,35 @@ final class ShelfStore: ObservableObject {
         }
     }
 
+    /// 拖出即移走：目标端已把源文件移走（⌘拖拽移动 / 拖到废纸篓），条目随文件一起离开。
+    /// 不记还原快照——旧路径已不存在，还原只会得到失效条目；改用轻提示说明去向。
+    func removeDraggedOut(_ targets: [ShelfItem], trashed: Bool) {
+        guard !targets.isEmpty else { return }
+        let ids = Set(targets.map(\.id))
+        withAnimation(.spring(response: 0.32, dampingFraction: 0.8)) {
+            releaseAuxState(ids: ids, paths: Set(targets.map(\.path)))
+            items.removeAll { ids.contains($0.id) }
+        }
+        postNotice(trashed
+            ? L10n.tf("已把 %d 个文件移到废纸篓", targets.count)
+            : L10n.tf("已移走 %d 个条目", targets.count))
+    }
+
+    /// 右键「移到废纸篓」：源文件进废纸篓 + 条目移除（不可还原）。
+    /// 返回成功移到废纸篓的条数；文件已不存在的跳过。
+    @discardableResult
+    func trashOriginals(_ targets: [ShelfItem]) -> Int {
+        var trashed: [ShelfItem] = []
+        for target in targets where FileManager.default.fileExists(atPath: target.path) {
+            if (try? FileManager.default.trashItem(at: target.url, resultingItemURL: nil)) != nil {
+                trashed.append(target)
+            }
+        }
+        guard !trashed.isEmpty else { return 0 }
+        removeDraggedOut(trashed, trashed: true)
+        return trashed.count
+    }
+
     /// 「移动到文件夹」/ 重命名后把条目改写为指向新路径（类型随新路径重新识别）
     func updatePath(id: UUID, to url: URL) {
         guard let index = items.firstIndex(where: { $0.id == id }) else { return }

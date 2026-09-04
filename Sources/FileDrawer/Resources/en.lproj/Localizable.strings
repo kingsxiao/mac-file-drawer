@@ -297,3 +297,50 @@
 /* 批次62：UI 打磨（2026-09 设计稿 docs/ui-optimization-design-2026-09.md） */
 "清空搜索词" = "Clear Search Text";
 "搜索匹配数 / 分组总数" = "Matches / total items in group";
+
+/* 剪贴板历史 */
+"剪贴板历史" = "Clipboard History";
+"剪贴板历史…" = "Clipboard History…";
+"剪贴板历史（⌘⇧V）" = "Clipboard History (⌘⇧V)";
+"返回抽屉（Esc）" = "Back to Drawer (Esc)";
+"清空历史（保留置顶）" = "Clear History (Keep Pinned)";
+"清空剪贴板历史？" = "Clear clipboard history?";
+"清空" = "Clear";
+"置顶条目会保留；正在监控的剪贴板不受影响。" = "Pinned entries are kept; clipboard monitoring continues.";
+"搜索历史" = "Search history";
+"还没有记录" = "Nothing yet";
+"没有匹配的历史" = "No matching history";
+"在任意应用里复制文字、链接、图像或文件\n就会出现在这里，点击收进抽屉" = "Copy text, links, images or files in any app\nand they show up here — click to send to the drawer";
+"换个关键词试试" = "Try another keyword";
+"已收进「%@」" = "Sent “%@” to the drawer";
+"抽屉里已有该条目" = "Already in the drawer";
+"内容已失效，未能收进抽屉" = "Content no longer available";
+"收进抽屉" = "Send to Drawer";
+"删除" = "Delete";
+"不再记录来自「%@」的复制" = "Stop recording copies from “%@”";
+"点击收进抽屉 · 右键查看更多操作" = "Click to send to drawer · Right-click for more";
+"剪贴板历史已关闭" = "Clipboard history is off";
+"在设置中开启" = "Enable in Settings";
+"已置顶 · 免于容量淘汰" = "Pinned · exempt from capacity limit";
+"%d 个文件" = "%d files";
+"%@ 等 %d 个文件" = "%@ and %d more files";
+"图像" = "Image";
+"文本" = "Text";
+"%d/%d" = "%d/%d";
+"记录剪贴板历史" = "Record clipboard history";
+"历史上限" = "History Limit";
+"200 条" = "200 items";
+"复制的文字、链接、图像与文件会记录在抽屉内（⌘⇧V），点击条目收进抽屉。被排除应用的复制不会被记录；置顶条目不占上限。" = "Copied text, links, images and files are recorded inside the drawer (⌘⇧V); click an entry to send it to the drawer. Copies from excluded apps are never recorded; pinned entries don't count toward the limit.";
+"不记录这些应用的复制" = "Don't record copies from these apps";
+"（无排除应用）" = "(no excluded apps)";
+"取消排除" = "Remove exclusion";
+"在剪贴板历史条目上右键「不再记录来自某应用的复制」可添加排除。" = "Right-click a history entry → “Stop recording copies from …” to exclude an app.";
+
+/* 拖出即移走 */
+"拖出（拷贝）后移除条目" = "Remove items after dragging out (copy)";
+"普通拖出默认拷贝并把条目留在抽屉；开启后拖出即移除（可还原）。无论开关：按住 ⌘ 拖到访达 = 移动源文件并移除条目，拖到程序坞废纸篓 = 删除。" = "A normal drag-out copies and keeps items in the drawer; when enabled, dragging out removes them (undoable). Regardless of this setting: ⌘-drag onto Finder moves the source files and removes the items, dropping on the Dock Trash deletes them.";
+"拖动瓷片拖出整批（%d 个）· 按住 ⌘ 拖到访达 = 移动" = "Drag the tile to drag out the batch (%d) · ⌘-drag onto Finder = move";
+"拖动瓷片拖出文件 · 按住 ⌘ 拖到访达 = 移动 · 拖到废纸篓 = 删除" = "Drag the tile to drag out the file · ⌘-drag onto Finder = move · drop on Trash = delete";
+"移到废纸篓" = "Move to Trash";
+"已把 %d 个文件移到废纸篓" = "Moved %d files to Trash";
+"已移走 %d 个条目" = "Moved out %d items";

@@ -61,9 +61,15 @@ or `make dmg` to roll your own DMG — see [Contributing](CONTRIBUTING.md).
   **⌘V** pastes a copied image ("Copy Image" in browsers / Preview) as a `.tiff`/`.png` file.
 - ✋ **Drag out to retrieve**: drag an item out of the drawer — dropping on Finder copies the real file;
   mail clients, chat windows and everything else accept it too.
+- 📦 **Move-out semantics**: hold **⌘ while dropping on Finder to *move*** the source files (Finder moves
+  them, the drawer entries follow and are cleaned up automatically); **drop the drag on the Dock Trash to
+  delete**; enable "Remove items after dragging out (copy)" in Settings to make plain copy-drags leave the
+  drawer too (undoable). Right-click → **Move to Trash** trashes the original files of the selection;
+  dragging a selected tile onto another row still reorders, so the tile is a universal handle
+  (drag out / ⌘-move / reorder).
 - 🖱 **Multi-select batches**: **⌘-click** to toggle items, **⇧-click** for ranges, **⌘A** to select all;
   Delete / ⌘C / ⏎ / context menus act on the whole batch Finder-style, batch removals are undoable;
-  **drag a tile while multiple items are selected to drag them all out at once** (×N badge preview,
+  **drag a tile while items are selected to drag them all out at once** (×N badge preview,
   dropped as a multi-file copy).
 - 📌 **Pin & manual ordering**: right-click "Pin" keeps frequent items on top (brand-color pin badge) and
   **exempts them from expiry cleanup and capacity eviction**; "Rearrange → Move up / down / to front / to back"
@@ -79,6 +85,12 @@ or `make dmg` to roll your own DMG — see [Contributing](CONTRIBUTING.md).
 - 📋 **Clipboard interop**: **⌘C** puts selected items on the clipboard Finder-style (paste anywhere,
   multi-select copies multiple files); **⌘V** pulls files from the clipboard into the drawer, and
   text/link/image clipboards materialize into items; context menu offers "Copy file".
+- 🕘 **Clipboard history**: copies from any app — text, links, images, files — are recorded in a history
+  panel inside the drawer (**⌘⇧V**, header button, or the menu bar). Click an entry (or hover actions /
+  context menu) to **send it to the drawer**, copy it back, pin it, or delete it; search-as-you-type,
+  relative time + source app on each row. Privacy-first: excluded apps are never recorded (password
+  managers are excluded by default; one right-click excludes any app), self-copies don't echo, images are
+  capped at 8 MB, and the history size (20/50/100/200) with pinned-exempt eviction is configurable.
 - ↩️ **Undoable removals**: after remove / clear / stale-cleanup, a toast at the bottom offers "Put Back"
   to restore items at their original positions, auto-dismissing on timeout; policy-based cleanups stay
   silent; duplicate drops get a "skipped N duplicates" hint.
@@ -143,6 +155,7 @@ or `make dmg` to roll your own DMG — see [Contributing](CONTRIBUTING.md).
 | ⌘↵ | While previewing: open current item with default app and close preview |
 | ⌘C | Copy selected item files (Finder-style, multiple on multi-select) |
 | ⌘V | Put clipboard files / text / links into the drawer |
+| ⌘⇧V | Toggle clipboard history view |
 | Delete / ⌘⌫ | Remove selection (whole batch; toast offers "Put Back"); while previewing, remove current and auto-advance |
 | Esc | Close preview / deselect / clear search |
 | ⌘F | Focus search (supports `kind:image` type syntax) |
@@ -323,10 +336,12 @@ Sources/FileDrawer/
 ├── ShelfModel.swift         # data model / groups / pin sorting / thumbnail pipeline / undo snapshots / Store
 ├── InboxStore.swift         # inbox: text/link materialization into real files (naming/dedup/sweep)
 ├── ClipboardSupport.swift   # clipboard interop (copy files / paste files & rich text)
+├── ClipboardHistory.swift   # clipboard history: capture/store/monitor/app exclusion/send-to-drawer
+├── ClipboardHistoryView.swift # clipboard history panel UI (search/pin/copy-back/adopt)
 ├── InteractionModel.swift   # selection/multi-select/kind: search/per-group sort/preview interaction state
 ├── FileIconStyle.swift      # dedicated icon styles for 350+ file types (contrast-guaranteed colors)
 ├── DragSupport.swift        # drag-out provider construction + drop payload parsing + relative-time localization
-├── DragOutSupport.swift     # multi-select drag-out: NSDraggingSession source (×N badge preview)
+├── DragOutSupport.swift     # selected-drag-out: NSDraggingSession source (×N badge, copy/move/delete semantics)
 ├── ReorderDrag.swift        # in-list drag reorder: custom UTType payload identification
 ├── OpenWithCatalog.swift    # "Open With" app catalog (default app first)
 ├── SpotlightContentSearch.swift # content search: NSMetadataQuery (debounce/timeout/escaping)
@@ -338,7 +353,7 @@ Sources/FileDrawer/
 └── ContentView.swift        # SwiftUI UI (header/group switcher/list/in-list drag/preview/empty state/toast)
 Sources/FileDrawer/Resources/{zh-Hans,en}.lproj/
                              # localization tables (English values; Chinese keys are the originals)
-Tests/FileDrawerTests/       # 220 tests: drag round-trips / multi-select / groups & pins / per-group sort /
+Tests/FileDrawerTests/       # 252 tests: drag round-trips / multi-select / groups & pins / per-group sort /
                              # stale detection / rename / export / cache / search syntax / persistence v3 /
                              # URL & Intents automation / contrast / localization / performance baselines / …
 scripts/smoke_automation.sh  # automation end-to-end smoke (make smoke-automation)

@@ -137,6 +137,18 @@ final class InteractionModel: ObservableObject {
         }
     }
     @Published var isPreviewVisible = false
+    /// 剪贴板历史视图：展开态下替换条目列表的第二个内容模式
+    /// （⌘⇧V / 头部按钮 / 菜单栏进入，Esc / 返回按钮退出）
+    @Published var showClipboardHistory = false {
+        didSet {
+            guard showClipboardHistory != oldValue else { return }
+            // 进出历史视图时收起搜索态，避免两个搜索框状态串台
+            if showClipboardHistory {
+                isSearchVisible = false
+                searchText = ""
+            }
+        }
+    }
     /// 收起态：抽屉缩成贴右缘的窄边条
     @Published var isCollapsed = false {
         didSet {

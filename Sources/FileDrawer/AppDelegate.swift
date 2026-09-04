@@ -75,6 +75,13 @@ final class KeyboardRouter {
             pasteFromClipboard(store: store)
             return nil
         }
+        // Cmd+Shift+V 打开 / 关闭剪贴板历史视图
+        if flags == [.command, .shift], event.keyCode == 9 { // V
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                model.showClipboardHistory.toggle()
+            }
+            return nil
+        }
         // Cmd+A 全选当前展示的条目
         if flags == .command, event.keyCode == 0 { // A
             model.selectAll(in: displayed)
@@ -127,6 +134,13 @@ final class KeyboardRouter {
         case 53: // Esc
             if model.isPreviewVisible {
                 model.closePreview()
+                return nil
+            }
+            // 剪贴板历史视图：Esc 先回抽屉条目列表
+            if model.showClipboardHistory {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                    model.showClipboardHistory = false
+                }
                 return nil
             }
             if model.selectedID != nil {
@@ -271,6 +285,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         buildMainMenu()
         setupStatusItem()
         keyboardRouter.start(panel: panel)
+        // 剪贴板历史监控随设置开关启动（设置变化时由 AppSettings.didSet 驱动增删）
+        ClipboardHistoryStore.shared.setMonitoring(settings.clipboardHistoryEnabled)
 
         // 拉手点击 → 收起/展开切换
         NotificationCenter.default.addObserver(
@@ -577,6 +593,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(.separator())
         menu.addItem(withTitle: L10n.t("导入文件…"), action: #selector(importAction), keyEquivalent: "")
         menu.addItem(withTitle: L10n.t("导出当前分组到文件夹…"), action: #selector(exportAllAction), keyEquivalent: "")
+        menu.addItem(withTitle: L10n.t("剪贴板历史…"), action: #selector(clipboardHistoryAction), keyEquivalent: "")
         menu.addItem(withTitle: L10n.t("清空当前分组"), action: #selector(clearAction), keyEquivalent: "")
 
         // 最近条目：按加入时间倒序取前 6 个，点击直接打开
@@ -731,6 +748,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func clearAction() {
         ShelfStore.shared.clear()
+    }
+
+    /// 菜单栏「剪贴板历史…」：展开抽屉并直接进入历史视图
+    @objc private func clipboardHistoryAction() {
+        expandDrawer()
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+            InteractionModel.shared.showClipboardHistory = true
+        }
     }
 
     /// 菜单栏「最近条目」点击：直接打开对应文件

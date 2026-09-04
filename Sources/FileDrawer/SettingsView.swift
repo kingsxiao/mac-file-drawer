@@ -308,6 +308,24 @@ private struct BehaviorSettingsTab: View {
                 Text(L10n.t("把条目拖离抽屉、拖拽结束后抽屉滑回收起边条。"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                Toggle(L10n.t("拖出（拷贝）后移除条目"), isOn: $settings.removeOnDragOut)
+                Text(L10n.t("普通拖出默认拷贝并把条目留在抽屉；开启后拖出即移除（可还原）。无论开关：按住 ⌘ 拖到访达 = 移动源文件并移除条目，拖到程序坞废纸篓 = 删除。"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Section(L10n.t("剪贴板历史")) {
+                Toggle(L10n.t("记录剪贴板历史"), isOn: $settings.clipboardHistoryEnabled)
+                if settings.clipboardHistoryEnabled {
+                    Picker(L10n.t("历史上限"), selection: $settings.clipboardHistoryLimit) {
+                        ForEach(ClipboardHistoryLimit.allCases) { limit in
+                            Text(limit.label).tag(limit)
+                        }
+                    }
+                    ClipboardExclusionEditor(excluded: $settings.clipboardExcludedApps)
+                    Text(L10n.t("复制的文字、链接、图像与文件会记录在抽屉内（⌘⇧V），点击条目收进抽屉。被排除应用的复制不会被记录；置顶条目不占上限。"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
             Section(L10n.t("窗口")) {
                 Toggle(L10n.t("切换到其他应用时自动收起"), isOn: $settings.autoCollapseOnBlur)
@@ -325,6 +343,58 @@ private struct BehaviorSettingsTab: View {
         }
         .formStyle(.grouped)
         .frame(maxHeight: .infinity, alignment: .top)
+    }
+}
+
+// MARK: - 剪贴板排除应用编辑器
+
+/// 排除列表：bundle id + 应用显示名（能解析到的话）+ 逐项移除。
+/// 添加入口在剪贴板历史条目的右键菜单（「不再记录来自「X」的复制」），这里负责查看与撤销排除。
+private struct ClipboardExclusionEditor: View {
+    @Binding var excluded: [String]
+
+    /// bundle id → 应用名（找不到返回 nil，界面退回显示 bundle id 本身）
+    private func appName(for bundleID: String) -> String? {
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else {
+            return nil
+        }
+        return Bundle(url: url)?.object(forInfoDictionaryKey: "CFBundleName") as? String
+            ?? Bundle(url: url)?.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(L10n.t("不记录这些应用的复制"))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            if excluded.isEmpty {
+                Text(L10n.t("（无排除应用）"))
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            } else {
+                ForEach(excluded, id: \.self) { bundleID in
+                    HStack(spacing: 6) {
+                        Text(appName(for: bundleID).map { "\($0)（\(bundleID)）" } ?? bundleID)
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        Spacer(minLength: 4)
+                        Button {
+                            excluded.removeAll { $0 == bundleID }
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.tertiary)
+                        .help(L10n.t("取消排除"))
+                    }
+                }
+            }
+            Text(L10n.t("在剪贴板历史条目上右键「不再记录来自某应用的复制」可添加排除。"))
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+        }
     }
 }
 

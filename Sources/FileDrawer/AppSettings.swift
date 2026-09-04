@@ -166,6 +166,34 @@ enum MaxItemsPolicy: Int, CaseIterable, Identifiable {
     }
 }
 
+/// 剪贴板历史上限（超出淘汰最旧，置顶豁免）
+enum ClipboardHistoryLimit: Int, CaseIterable, Identifiable {
+    case m20
+    case m50
+    case m100
+    case m200
+
+    var id: Int { rawValue }
+
+    var label: String {
+        switch self {
+        case .m20: return L10n.t("20 条")
+        case .m50: return L10n.t("50 条")
+        case .m100: return L10n.t("100 条")
+        case .m200: return L10n.t("200 条")
+        }
+    }
+
+    var count: Int {
+        switch self {
+        case .m20: return 20
+        case .m50: return 50
+        case .m100: return 100
+        case .m200: return 200
+        }
+    }
+}
+
 /// 界面语言
 enum AppLanguage: Int, CaseIterable, Identifiable {
     case system
@@ -270,6 +298,10 @@ final class AppSettings: ObservableObject {
         static let followMouseScreen = prefix + "followMouseScreen"
         static let searchFileContents = prefix + "searchFileContents"
         static let language = prefix + "language"
+        static let clipboardHistoryEnabled = prefix + "clipboardHistoryEnabled"
+        static let clipboardHistoryLimit = prefix + "clipboardHistoryLimit"
+        static let clipboardExcludedApps = prefix + "clipboardExcludedApps"
+        static let removeOnDragOut = prefix + "removeOnDragOut"
     }
 
     private let defaults: UserDefaults
@@ -326,6 +358,35 @@ final class AppSettings: ObservableObject {
     @Published var expandOnDragHover: Bool {
         didSet { defaults.set(expandOnDragHover, forKey: Keys.expandOnDragHover) }
     }
+    /// 拖出（拷贝）后自动移除条目。⌘ 拖拽的「移动」与拖到废纸篓始终移除，不受此开关影响
+    @Published var removeOnDragOut: Bool {
+        didSet { defaults.set(removeOnDragOut, forKey: Keys.removeOnDragOut) }
+    }
+
+    // MARK: 剪贴板历史
+
+    /// 后台记录剪贴板变化（关闭后立即停止轮询，已有历史保留）
+    @Published var clipboardHistoryEnabled: Bool {
+        didSet {
+            defaults.set(clipboardHistoryEnabled, forKey: Keys.clipboardHistoryEnabled)
+            ClipboardHistoryStore.shared.setMonitoring(clipboardHistoryEnabled)
+        }
+    }
+    /// 历史容量上限（置顶豁免）
+    @Published var clipboardHistoryLimit: ClipboardHistoryLimit {
+        didSet { defaults.set(clipboardHistoryLimit.rawValue, forKey: Keys.clipboardHistoryLimit) }
+    }
+    /// 不记录其复制的来源应用 bundle id 列表
+    @Published var clipboardExcludedApps: [String] {
+        didSet { defaults.set(deduplicated(clipped: clipboardExcludedApps), forKey: Keys.clipboardExcludedApps) }
+    }
+
+    /// 数组落库前去掉重复项（排除列表由菜单逐项增删，重复项没有意义）
+    private func deduplicated(clipped raw: [String]) -> [String] {
+        var seen = Set<String>()
+        return raw.filter { seen.insert($0).inserted }
+    }
+
     /// 切换到其他应用时自动收起抽屉
     @Published var autoCollapseOnBlur: Bool {
         didSet { defaults.set(autoCollapseOnBlur, forKey: Keys.autoCollapseOnBlur) }
@@ -463,6 +524,15 @@ final class AppSettings: ObservableObject {
         compactRows = defaults.bool(forKey: Keys.compactRows)
         autoClean = AutoCleanPolicy(rawValue: defaults.integer(forKey: Keys.autoClean)) ?? .off
         maxItems = MaxItemsPolicy(rawValue: defaults.integer(forKey: Keys.maxItems)) ?? .unlimited
+        removeOnDragOut = defaults.bool(forKey: Keys.removeOnDragOut)
+        clipboardHistoryEnabled = defaults.object(forKey: Keys.clipboardHistoryEnabled) as? Bool ?? true
+        clipboardHistoryLimit = ClipboardHistoryLimit(rawValue: defaults.integer(forKey: Keys.clipboardHistoryLimit)) ?? .m50
+        // 首次安装即带上密码管理器默认排除（老版本升级同理，只在列表为空时补默认）
+        var savedExclusions = defaults.stringArray(forKey: Keys.clipboardExcludedApps) ?? []
+        if savedExclusions.isEmpty {
+            savedExclusions = Array(ClipboardCapture.defaultExcludedBundleIDs).sorted()
+        }
+        clipboardExcludedApps = savedExclusions
         hotKeyEnabled = defaults.bool(forKey: Keys.hotKeyEnabled)
         hotKeyCode = defaults.object(forKey: Keys.hotKeyCode) as? Int ?? 49
         hotKeyModifiers = defaults.object(forKey: Keys.hotKeyModifiers) as? Int

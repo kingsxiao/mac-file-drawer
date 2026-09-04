@@ -140,7 +140,12 @@ struct ContentView: View {
                     displayedCount: displayedItems.count
                 )
 
-                if interaction.isSearchVisible || !interaction.searchText.isEmpty {
+                if interaction.showClipboardHistory {
+                    // 剪贴板历史：抽屉内的第二视图（自带头部 / 搜索 / 列表）
+                    ClipboardHistoryView(store: store, history: .shared)
+                        .padding(.top, 2)
+                        .transition(.opacity)
+                } else if interaction.isSearchVisible || !interaction.searchText.isEmpty {
                     SearchBarView(interaction: interaction, focused: $searchFocused)
                         .transition(.move(edge: .top).combined(with: .opacity))
                         .padding(.bottom, 7)
@@ -148,17 +153,19 @@ struct ContentView: View {
                     hairline
                 }
 
-                if store.currentItems.isEmpty {
-                    // 当前分组为空（含全部分组都空）：展示拖放空态，可直接接收文件
-                    Spacer(minLength: 0)
-                    EmptyStateView(isTargeted: isDropTargeted)
-                    Spacer(minLength: 0)
-                } else if displayedItems.isEmpty {
-                    NoResultsView(query: interaction.searchText) {
-                        withAnimation(.easeOut(duration: 0.18)) { interaction.searchText = "" }
+                if !interaction.showClipboardHistory {
+                    if store.currentItems.isEmpty {
+                        // 当前分组为空（含全部分组都空）：展示拖放空态，可直接接收文件
+                        Spacer(minLength: 0)
+                        EmptyStateView(isTargeted: isDropTargeted)
+                        Spacer(minLength: 0)
+                    } else if displayedItems.isEmpty {
+                        NoResultsView(query: interaction.searchText) {
+                            withAnimation(.easeOut(duration: 0.18)) { interaction.searchText = "" }
+                        }
+                    } else {
+                        itemList(displayedItems)
                     }
-                } else {
-                    itemList(displayedItems)
                 }
             }
             .padding(edgeInsetEdge, 26)                          // 贴边对侧给拉手胶囊留出 gutter
@@ -518,6 +525,10 @@ private struct DrawerDropDelegate: DropDelegate {
         DropFileLoader.loadAll(from: providers) { urls in
             guard !urls.isEmpty else { return }
             withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) {
+                // 正在看剪贴板历史时收到拖入：切回条目列表，让新条目可见
+                if InteractionModel.shared.showClipboardHistory {
+                    InteractionModel.shared.showClipboardHistory = false
+                }
                 let result = store.add(urls: urls)
                 if result.skippedDuplicates > 0 {
                     store.postNotice(L10n.tf("已跳过 %d 个重复条目", result.skippedDuplicates))
@@ -566,6 +577,17 @@ private struct HeaderView: View {
 
             HStack(spacing: 3) {
                 sortMenu
+                HoverCircleButton(
+                    systemImage: "doc.on.clipboard",
+                    tip: L10n.t("剪贴板历史（⌘⇧V）"),
+                    size: 25,
+                    // 历史视图打开时常亮 primary 作状态标记（与搜索按钮同一惯例）
+                    tint: interaction.showClipboardHistory ? Color.primary : .secondary
+                ) {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                        interaction.showClipboardHistory.toggle()
+                    }
+                }
                 HoverCircleButton(
                     systemImage: "magnifyingglass",
                     tip: L10n.t("搜索（⌘F）"),
@@ -1027,22 +1049,27 @@ private struct ItemRow: View {
                         .help(L10n.t("已置顶 · 免于自动清理"))
                 }
             }
-            // 多选时瓷片变成整批拖拽把手：拖它 = 拖出全部选中条目
+            // 选中时瓷片变成拖拽把手：拖它 = 拖出全部选中条目（单选 = 拖出该条目）。
+            // 普通拖出 = 拷贝；⌘ 拖到访达 = 移动（源文件移走、条目随之移除）；
+            // 拖到程序坞废纸篓 = 删除。拖到抽屉内其他行上 = 排序。
             .overlay {
                 MultiDragOverlay(
                     active: !batchDragTargets.isEmpty,
                     targets: batchDragTargets,
                     onSessionBegan: {
-                        guard settings.collapseAfterDragOut else { return }
-                        DragSessionObserver.notifyDragEnd {
-                            guard settings.collapseAfterDragOut,
-                                  !InteractionModel.shared.isCollapsed else { return }
-                            NotificationCenter.default.post(name: .toggleDrawer, object: nil)
-                        }
+                        // 瓷片拖拽也开排序会话：落点代理按会话记录判别，拖到行上即排序
+                        interaction.beginReorderSession(dragging: item.id)
+                    },
+                    onSessionEnded: { operation in
+                        handleTileDragEnd(batchDragTargets, operation: operation)
                     }
                 )
             }
-            .help(batchDragTargets.isEmpty ? "" : L10n.tf("拖动瓷片可拖出整批（%d 个）", batchDragTargets.count))
+            .help(batchDragTargets.isEmpty
+                  ? ""
+                  : batchDragTargets.count > 1
+                  ? L10n.tf("拖动瓷片拖出整批（%d 个）· 按住 ⌘ 拖到访达 = 移动", batchDragTargets.count)
+                  : L10n.t("拖动瓷片拖出文件 · 按住 ⌘ 拖到访达 = 移动 · 拖到废纸篓 = 删除"))
             .scaleEffect(hovered ? 1.07 : 1)
             .animation(.spring(response: 0.28, dampingFraction: 0.6), value: hovered)
     }
@@ -1113,16 +1140,43 @@ private struct ItemRow: View {
         NSWorkspace.shared.open(item.url)
     }
 
-    /// 多选批量拖出的目标集合：行在多选集合里才非空（此时瓷片是拖拽把手）
+    /// 多选批量拖出的目标集合：行在选中集合里即非空（单选时瓷片也是拖出把手）
     private var batchDragTargets: [ShelfItem] {
-        guard interaction.selectedIDs.contains(item.id),
-              interaction.selectedIDs.count > 1 else { return [] }
+        guard interaction.selectedIDs.contains(item.id) else { return [] }
         return interaction.selectedItems(
             in: interaction.displayItems(
                 from: store.currentItems,
                 sort: interaction.sortMode(for: store.currentDrawerID)
             )
         )
+    }
+
+    /// 瓷片拖拽会话结束：按目标端实际执行的操作处置条目（移走语义），
+    /// 并接管「拖出后自动收起」（原来是粘贴板轮询，这里拿到的是真实回调）
+    private func handleTileDragEnd(_ targets: [ShelfItem], operation: NSDragOperation) {
+        guard !targets.isEmpty else { return }
+        let landedOnRow = interaction.reorderLandedOnRow
+        switch DragOutSupport.disposition(
+            for: operation,
+            landedOnRow: landedOnRow,
+            removeOnCopy: settings.removeOnDragOut
+        ) {
+        case .keep:
+            break
+        case .removeUndoable:
+            // 拷贝完成 + 开了「拖出后移除」：源文件仍在原位，还原快照有意义
+            withAnimation(.spring(response: 0.32, dampingFraction: 0.8)) {
+                store.remove(targets)
+            }
+        case .removeSilently(let trashed):
+            // 访达已把源文件移走 / 文件已进废纸篓：条目随之离开（轻提示说明去向）
+            store.removeDraggedOut(targets, trashed: trashed)
+        }
+        if settings.collapseAfterDragOut,
+           !landedOnRow, operation != [],
+           !InteractionModel.shared.isCollapsed {
+            NotificationCenter.default.post(name: .toggleDrawer, object: nil)
+        }
     }
 
     /// 右键菜单操作目标：行在多选集合里 → 整个集合（访达语义）；范围限当前分组
@@ -1176,6 +1230,13 @@ private struct ItemRow: View {
         Button(L10n.t("拷贝文件") + countSuffix(targets)) { ClipboardSupport.copyFiles(targets) }
         Button(L10n.t("拷贝路径") + countSuffix(targets)) { copyPaths(targets) }
         Button(L10n.t("移动到文件夹…") + countSuffix(targets)) { moveToFolder(targets) }
+        if targets.contains(where: { !store.missingIDs.contains($0.id) }) {
+            Button(L10n.t("移到废纸篓") + countSuffix(targets), role: .destructive) {
+                if store.trashOriginals(targets) == 0 {
+                    NSSound.beep()
+                }
+            }
+        }
         if targets.count == 1 {
             Button(L10n.t("重命名…")) {
                 renameText = item.name
