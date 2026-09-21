@@ -27,6 +27,10 @@ final class WindowSpringAnimator {
     /// 启动（或接力）一条弹簧：从窗口当前 frame 平滑趋向目标。
     /// 默认参数的阻尼比 ≈ 0.76（过冲 ≈ 2.7%、约 0.4 秒收敛）——
     /// 肉眼能感到"拉出一格后轻轻回弹"，又不会晃。
+    /// 与 SwiftUI 侧 DrawerMotion.expand（0.4/0.9）互为配套基准：壳（窗口 frame）
+    /// 与内容（视图层）两侧同量级回弹，调任一侧时同步另一侧。
+    /// 「减少动态」开启时阻尼强制提至临界（≈2√stiffness，阻尼比 1.0）：
+    /// 无过冲纯收敛，窗口只做直线滑入滑出。
     /// - Parameters:
     ///   - stiffness: 刚度，越大越快
     ///   - damping: 阻尼，越小过冲越明显
@@ -36,6 +40,9 @@ final class WindowSpringAnimator {
         stiffness: Double = 210,
         damping: Double = 22
     ) {
+        let effectiveDamping = DrawerMotion.reduceMotionEnabled
+            ? max(damping, 2 * stiffness.squareRoot())
+            : damping
         self.window = window
         let current = window.frame
         // 接力时保留现有速度，切换目标不突兀
@@ -60,7 +67,7 @@ final class WindowSpringAnimator {
         timer?.invalidate()
         let t = Timer(timeInterval: 1.0 / 120.0, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
-                self?.step(stiffness: stiffness, damping: damping)
+                self?.step(stiffness: stiffness, damping: effectiveDamping)
             }
         }
         RunLoop.main.add(t, forMode: .common)

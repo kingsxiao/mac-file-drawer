@@ -80,7 +80,7 @@ enum DrawerCommands {
         let candidates = store.items(in: drawerID).sorted { $0.addedAt > $1.addedAt }
         let targets = limit > 0 ? Array(candidates.prefix(limit)) : Array(candidates)
         guard !targets.isEmpty else { return 0 }
-        withAnimation(.spring(response: 0.32, dampingFraction: 0.8)) {
+        withAnimation(DrawerMotion.listChange) {
             store.remove(targets)
         }
         DiagnosticsLog.shared.log("auto", "remove group=\(group ?? "-") limit=\(limit) count=\(targets.count)")

@@ -121,7 +121,9 @@ enum AutoCleanPolicy: Int, CaseIterable, Identifiable {
 
     var label: String {
         switch self {
-        case .off: return L10n.t("关闭")
+        // 「关闭」一词三义（动作 / 策略 / 动词）在英文表里撞 key：枚举用完整短语，
+        // 让「关闭 = Close」只留给关闭动作
+        case .off: return L10n.t("不自动清理")
         case .oneDay: return L10n.t("1 天后")
         case .week: return L10n.t("7 天后")
         case .month: return L10n.t("30 天后")

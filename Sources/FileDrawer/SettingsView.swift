@@ -213,7 +213,11 @@ private struct GeneralSettingsTab: View {
             try LoginItemController.setEnabled(on)
             loginItemError = nil
         } catch {
-            loginItemError = L10n.tf("未能%@登录启动：%@", on ? L10n.t("开启") : L10n.t("关闭"), error.localizedDescription)
+            // 完整句 key（不再嵌「开启 / 关闭」动词 key）：双语各自成句，「关闭」
+            // 只留给关闭动作，避免英文表撞 key
+            loginItemError = on
+                ? L10n.tf("未能开启登录启动：%@", error.localizedDescription)
+                : L10n.tf("未能关闭登录启动：%@", error.localizedDescription)
         }
         // 无论成败都以系统当前状态为准
         launchAtLogin = LoginItemController.isEnabled
@@ -425,7 +429,7 @@ private struct ShortcutSettingsTab: View {
                 }
             }
             Section {
-                Text(L10n.t("热键在任意应用前台时都能展开 / 收起抽屉。组合必须包含 ⌘、⌥ 或 ⌃ 修饰键，点击右侧按键框后按下新组合即可录制。") + " ⌘F · ⌘A · ⌘1–⌘9 · ⌘↑⌘↓")
+                Text(L10n.t("热键在任意应用前台时都能展开 / 收起抽屉。组合必须包含 ⌘、⌥ 或 ⌃ 修饰键，点击右侧按键框后按下新组合即可录制。") + " ⌘F · ⌘A · ⌘1–⌘9 · ⌃⌘↑⌃⌘↓")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -554,11 +558,34 @@ private struct TileContrastPreviewSection: View {
                 cell(base: sample.lightBase, symbol: sample.lightAdjusted)
                 cell(base: sample.darkBase, symbol: sample.darkAdjusted)
             }
-            Text(String(format: "%.1f:%.1f", sample.lightRatio, sample.darkRatio))
-                .font(.system(size: 9, weight: .medium, design: .monospaced))
-                .monospacedDigit()
-                .foregroundStyle(meetsThreshold(sample) ? .secondary : Color.red)
+            HStack(spacing: 3) {
+                // 不达标角标：与条目行「文件已不存在」同一警示语言，色弱 / 放大场景可辨
+                if !meetsThreshold(sample) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(DrawerTheme.danger)
+                        .help(L10n.t("对比度未达标"))
+                }
+                Text(String(format: "%.1f:%.1f", sample.lightRatio, sample.darkRatio))
+                    .font(.system(size: 9, weight: .medium, design: .monospaced))
+                    .monospacedDigit()
+                    .foregroundStyle(meetsThreshold(sample) ? .secondary : Color.red)
+            }
         }
+        // 色块与「4.2:3.5」比值对 VoiceOver 都无语义：合成一个元素，朗读类型色 + 双模式比值
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(String(format: "#%06X", sample.hex))
+        .accessibilityValue(swatchAccessibilityValue(sample))
+    }
+
+    /// 色板的 VoiceOver 版本：双模式实测比值 + 是否达标
+    private func swatchAccessibilityValue(_ sample: TypeColorContrast.Sample) -> String {
+        let value = L10n.tf(
+            "浅色模式 %.1f:1，深色模式 %.1f:1",
+            sample.lightRatio,
+            sample.darkRatio
+        )
+        return meetsThreshold(sample) ? value : value + " · " + L10n.t("未达标")
     }
 
     private func cell(base: UInt32, symbol: UInt32) -> some View {

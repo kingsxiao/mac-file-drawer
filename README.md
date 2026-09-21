@@ -73,7 +73,7 @@ or `make dmg` to roll your own DMG — see [Contributing](CONTRIBUTING.md).
   dropped as a multi-file copy).
 - 📌 **Pin & manual ordering**: right-click "Pin" keeps frequent items on top (brand-color pin badge) and
   **exempts them from expiry cleanup and capacity eviction**; "Rearrange → Move up / down / to front / to back"
-  switches the group to manual ordering (⌘↑ / ⌘↓ nudge the selection).
+  switches the group to manual ordering (⌃⌘↑ / ⌃⌘↓ nudge the selection).
 - ✏️ **Rename**: right-click "Rename…" renames in place (name collisions get a numeric suffix, type is
   re-detected from the new extension).
 - 🩺 **Stale-item detection**: background existence scans on launch / expand / list changes; stale items dim
@@ -149,9 +149,11 @@ or `make dmg` to roll your own DMG — see [Contributing](CONTRIBUTING.md).
 | ← → | Switch items while previewing (same as ↑↓) |
 | PageUp / PageDown | Page the selection (8 rows) |
 | Home / End | Jump to first / last item |
-| ⌘↑ / ⌘↓ | Nudge selection in manual-order mode (auto-switches to it) |
+| ⌃⌘↑ / ⌃⌘↓ | Nudge selection in manual-order mode (auto-switches to it) |
 | ⌘1 … ⌘9 | Switch to group N |
 | ⏎ | Open selected file(s) (all of them on multi-select) |
+| ⌘↓ | Open selected file(s) — same as ⏎, aligned with system list convention |
+| ⌘Z | Undo the last removal (also in Edit menu; disabled without a snapshot) |
 | ⌘↵ | While previewing: open current item with default app and close preview |
 | ⌘C | Copy selected item files (Finder-style, multiple on multi-select) |
 | ⌘V | Put clipboard files / text / links into the drawer |
@@ -230,7 +232,7 @@ asserts store-v3 state, 8/8; also runnable on a clean runner via Actions → CI 
 | Open | Double-click the card (single-click mode in Settings); right-click "Open With" for alternatives |
 | Multi-select | ⌘-click to toggle, ⇧-click for range, ⌘A for all; subsequent actions hit the batch |
 | Pin | Right-click → "Pin": top of list + exempt from auto-cleanup |
-| Rearrange | Hover for the grip handle and drag to a row (manual order auto-engages; dragging across the pin zone pins/unpins); or context menu / ⌘↑ / ⌘↓ |
+| Rearrange | Hover for the grip handle and drag to a row (manual order auto-engages; dragging across the pin zone pins/unpins); or context menu / ⌃⌘↑ / ⌃⌘↓ |
 | Rename | Right-click → "Rename…" (collision suffixes automatic) |
 | Reveal | Hover the card, click the "folder" icon |
 | Copy file / path | Context menu → "Copy file / Copy path", or select and **⌘C** (copies files) |

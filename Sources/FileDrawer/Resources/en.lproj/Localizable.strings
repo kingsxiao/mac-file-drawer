@@ -11,7 +11,6 @@
 "设置" = "Settings";
 "关于文件抽屉" = "About File Drawer";
 "退出文件抽屉" = "Quit File Drawer";
-"展开抽屉" = "Expand Drawer";
 "收起成边条" = "Collapse to Edge Tab";
 "展开 / 隐藏抽屉" = "Show / Hide Drawer";
 "隐藏文件抽屉" = "Hide File Drawer";
@@ -103,7 +102,6 @@
 "按名称 A–Z" = "Name A–Z";
 "按类型分组" = "By Type";
 "手动顺序" = "Manual Order";
-"关闭" = "Off";
 "1 天后" = "After 1 Day";
 "7 天后" = "After 7 Days";
 "30 天后" = "After 30 Days";
@@ -196,14 +194,8 @@
 "重命名「%@」" = "Rename “%@”";
 "%d 个条目移动失败" = "%d items failed to move";
 "将同时修改磁盘上的文件；同名文件会自动追加序号。" = "Renames the file on disk; name collisions get a numeric suffix.";
-"新名称" = "New name";
 
 /* 批次28 追加 */
-"收起抽屉" = "Collapse Drawer";
-"未能%@登录启动：%@" = "Failed to %@ login item: %@";
-"开启" = "enable";
-"关闭" = "disable";
-"界面语言" = "Interface Language";
 "未单独设置的分组用上面的全局「容量上限」；调整后立即生效，淘汰各组内最早加入的条目（置顶豁免）。" = "Groups without an override use the global limit above; takes effect immediately, evicting oldest items per group (pinned exempt).";
 "置顶 %d" = "%d pinned";
 "失效 %d" = "%d missing";
@@ -218,14 +210,12 @@
 "单击选中，双击打开文件" = "Click to select, double-click to open";
 "已置顶" = "Pinned";
 "切换" = "Switch";
-"重命名「%@」" = "Rename “%@”";
 "版本 %@（%@）" = "Version %@ (%@)";
 "收起抽屉" = "Collapse Drawer";
 
 /* 关于窗口 */
 "当前 %d 个条目 · %d 个分组" = "%d items · %d groups";
 "Swift + AppKit + SwiftUI · 无第三方依赖" = "Swift + AppKit + SwiftUI · zero third-party dependencies";
-"⌥Space 呼出抽屉 · 右键条目看全部操作" = "⌥Space toggles the drawer · right-click an item for all actions";
 "自动化：filedrawer:// URL 与快捷指令（Shortcuts）" = "Automation: filedrawer:// URLs and Shortcuts";
 
 /* 批次30 追加 */
@@ -261,7 +251,6 @@
 /* 批次35：置顶/置前自动化 */
 "置顶抽屉条目" = "Pin Drawer Items";
 "置顶（或取消置顶）分组（默认当前分组）的条目；数量为 0 表示全部。置顶条目浮到最前且免于自动清理。" = "Pins (or unpins) items in a group (current if unset); 0 = all. Pinned items float to top and are exempt from auto-clean.";
-"置顶" = "Pin";
 "抽屉条目移到最前" = "Send Drawer Items to Front";
 "把分组（默认当前分组）的最新若干条（0=全部）移到最前，并把该分组切到「手动顺序」。" = "Moves the newest items (0 = all) of a group (current if unset) to the front and switches the group to manual order.";
 
@@ -292,7 +281,6 @@
 
 /* 批次61：L10n 覆盖度审计补齐 */
 "%d 个项目" = "%d items";
-"当前 %d 个条目 · %d 个分组" = "%d items · %d groups";
 
 /* 批次62：UI 打磨（2026-09 设计稿 docs/ui-optimization-design-2026-09.md） */
 "清空搜索词" = "Clear Search Text";
@@ -344,3 +332,30 @@
 "移到废纸篓" = "Move to Trash";
 "已把 %d 个文件移到废纸篓" = "Moved %d files to Trash";
 "已移走 %d 个条目" = "Moved out %d items";
+
+/* 键盘惯例与 VoiceOver 可达性（⌘Z 撤销 / ⌘↓ 打开 / 历史视图键盘集） */
+"撤销" = "Undo";
+"切换 / 管理分组，当前「%@」" = "Switch / manage groups, current “%@”";
+"搜索匹配 %d 个，分组共 %d 个" = "%d matches out of %d items in the group";
+"分组内 %d 个条目" = "%d items in the group";
+"%d 个条目" = "%d items";
+"置顶 %d 条，共 %d 条" = "%d pinned, %d total";
+"共 %d 条" = "%d entries total";
+"浅色模式 %.1f:1，深色模式 %.1f:1" = "Light mode %.1f:1, dark mode %.1f:1";
+"未达标" = "below threshold";
+"对比度未达标" = "Contrast below threshold";
+
+/* 高危操作的反馈闭环（清空确认 / 拖入被搜索过滤 / 拷贝多选反馈） */
+"清空「%@」？" = "Clear “%@”?";
+"条目将从抽屉移除，源文件保留在原位；清空后可在提示条上「还原」。" = "Items are removed from the drawer only; source files stay in place. You can “Put Back” from the toast afterwards.";
+"已放入 %d 个条目 · 被当前搜索过滤隐藏" = "Added %d items · hidden by the active search";
+"已拷贝 %d 条路径" = "Copied %d paths";
+
+/* 可读性与一致性批次：拆「关闭」三义、关于窗口热键行、诊断文件名 */
+"不自动清理" = "No auto-cleanup";
+"未能开启登录启动：%@" = "Couldn't enable launch at login: %@";
+"未能关闭登录启动：%@" = "Couldn't disable launch at login: %@";
+"关闭预览（Esc）" = "Close preview (Esc)";
+"FileDrawer-诊断.txt" = "FileDrawer-Diagnostics.txt";
+"%@ 呼出抽屉 · 右键条目看全部操作" = "Summon the drawer with %@ · right-click an item for all actions";
+"菜单栏 / Dock 图标呼出抽屉 · 右键条目看全部操作" = "Summon the drawer from the menu bar / Dock icon · right-click an item for all actions";

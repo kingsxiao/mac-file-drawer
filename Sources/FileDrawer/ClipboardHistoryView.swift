@@ -11,14 +11,15 @@ struct ClipboardHistoryView: View {
     @ObservedObject var store: ShelfStore
     @ObservedObject var history: ClipboardHistoryStore
     @ObservedObject private var settings = AppSettings.shared
-    @State private var searchText = ""
+    /// ⌘F 聚焦信号（KeyboardRouter → InteractionModel.historyFocusToken → 此处）
+    @ObservedObject private var interaction = InteractionModel.shared
     @FocusState private var searchFocused: Bool
     @State private var clearConfirmVisible = false
     /// 图像条目的解码缓存（视图私有；图像 Data → NSImage 只解一次）
     @State private var imageCache: [UUID: NSImage] = [:]
 
     private var displayed: [ClipboardEntry] {
-        history.displayedEntries(matching: searchText)
+        history.displayedEntries(matching: history.searchText)
     }
 
     var body: some View {
@@ -40,6 +41,23 @@ struct ClipboardHistoryView: View {
             }
         }
         // 轻提示（收进抽屉反馈等）由 ContentView 的全局 toast 浮层统一展示
+        .onAppear {
+            // 每次进入历史视图重置搜索与选中锚点（搜索词上移到 store 后，
+            // 保持「重新进入即干净」的原有语义）
+            history.searchText = ""
+            history.selectedEntryID = nil
+        }
+        // ⌘F：聚焦历史视图自带的搜索框（token 递增驱动，仿主搜索框的 syncFocus 先例）
+        .onChange(of: interaction.historyFocusToken) {
+            DispatchQueue.main.async { searchFocused = true }
+        }
+        // 搜索词变化后锚点可能指向被过滤掉的条目：收回（与条目列表 reconcile 同构）
+        .onChange(of: history.searchText) {
+            if let id = history.selectedEntryID,
+               !displayed.contains(where: { $0.id == id }) {
+                history.selectedEntryID = nil
+            }
+        }
     }
 
     // MARK: 头部：返回 + 标题 + 计数 + 搜索 + 清空
@@ -65,6 +83,8 @@ struct ClipboardHistoryView: View {
                     .monospacedDigit()
                     .foregroundStyle(.tertiary)
                     .lineLimit(1)
+                    // 纯数字「n/m」对 VoiceOver 无语义，展开成完整语句播报
+                    .accessibilityLabel(footnoteAccessibilityLabel)
             }
 
             Spacer(minLength: 4)
@@ -87,11 +107,11 @@ struct ClipboardHistoryView: View {
         .padding(.vertical, 10)
         .alert(L10n.t("清空剪贴板历史？"), isPresented: $clearConfirmVisible) {
             Button(L10n.t("清空"), role: .destructive) {
-                withAnimation(.spring(response: 0.32, dampingFraction: 0.82)) {
+                withAnimation(DrawerMotion.listChange) {
                     history.clear()
                 }
             }
-            Button("取消", role: .cancel) {}
+            Button(L10n.t("取消"), role: .cancel) {}
         } message: {
             Text(L10n.t("置顶条目会保留；正在监控的剪贴板不受影响。"))
         }
@@ -106,70 +126,97 @@ struct ClipboardHistoryView: View {
         return "\(history.entries.count)"
     }
 
+    /// 注脚的 VoiceOver 版本：数字展开成语句
+    private var footnoteAccessibilityLabel: String {
+        let pinned = history.entries.filter(\.pinned).count
+        if pinned > 0 {
+            return L10n.tf("置顶 %d 条，共 %d 条", pinned, history.entries.count)
+        }
+        return L10n.tf("共 %d 条", history.entries.count)
+    }
+
     private var searchField: some View {
         HStack(spacing: 4) {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 10, weight: .medium))
                 .foregroundStyle(.tertiary)
-            TextField(L10n.t("搜索历史"), text: $searchText)
+            TextField(L10n.t("搜索历史"), text: $history.searchText)
                 .textFieldStyle(.plain)
                 .font(.system(size: 11.5))
                 .focused($searchFocused)
                 .lineLimit(1)
-            if !searchText.isEmpty {
+            if !history.searchText.isEmpty {
                 HoverCircleButton(systemImage: "xmark.circle.fill", tip: L10n.t("清除搜索"), size: 16) {
-                    searchText = ""
+                    history.searchText = ""
                 }
             }
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 5)
         .background(
-            Capsule().fill(Color.primary.opacity(0.06))
+            Capsule().fill(Color.primary.opacity(searchFocused ? 0.07 : 0.05))
         )
         .overlay(
-            Capsule().strokeBorder(Color.primary.opacity(0.1), lineWidth: 0.8)
+            // 聚焦态中性石墨描边加重（不用品牌色——搜索 UI 全程无彩色），
+            // 参数与主搜索框 SearchBarView 同一套：0.05→0.07 底、0.07→0.30 描边
+            Capsule().strokeBorder(
+                Color.primary.opacity(searchFocused ? 0.30 : 0.07),
+                lineWidth: 1
+            )
         )
+        .animation(DrawerMotion.fade, value: searchFocused)
         .frame(width: 118)
     }
 
     // MARK: 列表
 
     private func entryList(_ entries: [ClipboardEntry]) -> some View {
-        ScrollView {
-            LazyVStack(spacing: settings.compactRows ? 5 : 7) {
-                ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
-                    ClipboardHistoryRow(
-                        entry: entry,
-                        tileSize: settings.compactRows ? 32 : 42,
-                        compact: settings.compactRows,
-                        image: imageCache[entry.id],
-                        onDecodeImage: { image in imageCache[entry.id] = image }
-                    ) {
-                        adopt(entry)
-                    } onCopy: {
-                        history.copyBack(entry)
-                    } onTogglePin: {
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                            history.togglePin(id: entry.id)
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(spacing: settings.compactRows ? 5 : 7) {
+                    ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
+                        ClipboardHistoryRow(
+                            entry: entry,
+                            isSelected: history.selectedEntryID == entry.id,
+                            tileSize: settings.compactRows ? 32 : 42,
+                            compact: settings.compactRows,
+                            image: imageCache[entry.id],
+                            onDecodeImage: { image in imageCache[entry.id] = image }
+                        ) {
+                            // 行点击同步键盘锚点（与条目列表单击选中同构）
+                            history.selectedEntryID = entry.id
+                            adopt(entry)
+                        } onCopy: {
+                            history.copyBack(entry)
+                        } onTogglePin: {
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                history.togglePin(id: entry.id)
+                            }
+                        } onDelete: {
+                            withAnimation(DrawerMotion.listChange) {
+                                history.removeEntry(id: entry.id)
+                            }
                         }
-                    } onDelete: {
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.82)) {
-                            history.removeEntry(id: entry.id)
-                        }
+                        .transition(.asymmetric(
+                            insertion: .opacity,
+                            removal: .opacity.combined(with: .scale(scale: 0.94))
+                        ))
+                        .id(entry.id)
                     }
-                    .transition(.asymmetric(
-                        insertion: .opacity,
-                        removal: .opacity.combined(with: .scale(scale: 0.94))
-                    ))
-                    .id(entry.id)
+                }
+                .padding(.top, 7)
+                // toast 悬浮期间列表底部让位（与条目列表同一惯例，最后一行不被轻提示盖住）
+                .padding(.bottom, store.notice != nil || store.undoSnapshot != nil ? 64 : 12)
+                // 键盘 ↑↓ 移动选中锚点时，选中行平滑滚入视野（与条目列表同一先例）
+                .onChange(of: history.selectedEntryID) {
+                    guard let id = history.selectedEntryID else { return }
+                    withAnimation(DrawerMotion.smooth) {
+                        proxy.scrollTo(id, anchor: .center)
+                    }
                 }
             }
-            .padding(.top, 7)
-            // toast 悬浮期间列表底部让位（与条目列表同一惯例，最后一行不被轻提示盖住）
-            .padding(.bottom, store.notice != nil || store.undoSnapshot != nil ? 64 : 12)
+            .scrollBounceBehavior(.basedOnSize)
         }
-        .scrollBounceBehavior(.basedOnSize)
     }
 
     // MARK: 空态 / 关闭横幅
@@ -209,10 +256,10 @@ struct ClipboardHistoryView: View {
             .frame(width: 62, height: 62)
 
             VStack(spacing: 5) {
-                Text(searchText.isEmpty ? L10n.t("还没有记录") : L10n.t("没有匹配的历史"))
+                Text(history.searchText.isEmpty ? L10n.t("还没有记录") : L10n.t("没有匹配的历史"))
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(Color.primary.opacity(0.85))
-                Text(searchText.isEmpty
+                Text(history.searchText.isEmpty
                      ? L10n.t("在任意应用里复制文字、链接、图像或文件\n就会出现在这里，点击收进抽屉")
                      : L10n.t("换个关键词试试"))
                     .font(.system(size: 11.5))
@@ -227,17 +274,10 @@ struct ClipboardHistoryView: View {
 
     // MARK: 操作
 
-    /// 收进抽屉（当前分组）：按载荷物化 / 入列，给可见反馈
+    /// 收进抽屉（当前分组）：反馈口径统一在 store 的 adopt(_:withFeedbackIn:)
     private func adopt(_ entry: ClipboardEntry) {
         withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) {
-            let result = history.adopt(entry, into: store)
-            if result.added > 0 {
-                store.postNotice(L10n.tf("已收进「%@」", ClipboardCapture.title(of: entry.payload)))
-            } else if result.skippedDuplicates > 0 {
-                store.postNotice(L10n.t("抽屉里已有该条目"))
-            } else {
-                store.postNotice(L10n.t("内容已失效，未能收进抽屉"))
-            }
+            history.adopt(entry, withFeedbackIn: store)
         }
     }
 }
@@ -246,6 +286,8 @@ struct ClipboardHistoryView: View {
 
 private struct ClipboardHistoryRow: View {
     let entry: ClipboardEntry
+    /// 键盘选中锚点命中本行（行底青釉罩染 + isSelected trait，与 ItemRow 同语言）
+    var isSelected: Bool = false
     var tileSize: CGFloat
     var compact: Bool
     /// 父视图解码好的图像（image 载荷）
@@ -332,7 +374,15 @@ private struct ClipboardHistoryRow: View {
         .padding(.vertical, compact ? 6 : 10.5)
         .background(
             RoundedRectangle(cornerRadius: radius, style: .continuous)
-                .fill(Color.primary.opacity(hovered ? 0.08 : 0.05))
+                .fill(rowFill)
+        )
+        // 选中描边：与 ItemRow 同一道发丝线勾勒
+        .overlay(
+            RoundedRectangle(cornerRadius: radius, style: .continuous)
+                .strokeBorder(
+                    isSelected ? DrawerTheme.selection.opacity(0.32) : .clear,
+                    lineWidth: 1
+                )
         )
         .overlay(
             RoundedRectangle(cornerRadius: radius, style: .continuous)
@@ -359,8 +409,34 @@ private struct ClipboardHistoryRow: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityDescription)
         .accessibilityAddTraits(.isButton)
+        // 键盘选中锚点外显为 VoiceOver 选中态（与 ItemRow 同语言）
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
         // onTapGesture 不产生 AXPress：显式注册默认激活动作，辅助技术可触发「收进抽屉」
         .accessibilityAction { onAdopt() }
+    }
+
+    /// 行底：选中 = 青釉罩染（前浓后淡 + 悬停加深，与条目列表 ItemRow 同一语言）；
+    /// 平时 = 中性微浮层。两侧同构渐变，切换可平滑插值
+    private var rowFill: LinearGradient {
+        if isSelected {
+            return LinearGradient(
+                stops: [
+                    .init(color: DrawerTheme.selection.opacity(hovered ? 0.20 : 0.15), location: 0),
+                    .init(color: DrawerTheme.selection.opacity(hovered ? 0.13 : 0.10), location: 0.45),
+                    .init(color: DrawerTheme.selection.opacity(hovered ? 0.07 : 0.05), location: 1),
+                ],
+                startPoint: .leading, endPoint: .trailing
+            )
+        }
+        let tint = Color.primary.opacity(hovered ? 0.08 : 0.05)
+        return LinearGradient(
+            stops: [
+                .init(color: tint, location: 0),
+                .init(color: tint, location: 0.45),
+                .init(color: tint, location: 1),
+            ],
+            startPoint: .leading, endPoint: .trailing
+        )
     }
 
     @ViewBuilder
@@ -445,9 +521,20 @@ private struct ClipboardHistoryRow: View {
             .scaledToFill()
             .frame(width: tileSize, height: tileSize)
             .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
+            // 与 FileTile.thumbnailTile 同款渐变高光 + 尺寸公式（明暗分档一致），
+            // 平色白描边会让历史图像瓷片与主列表两种质感
             .overlay(
                 RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .strokeBorder(Color.white.opacity(colorScheme == .dark ? 0.42 : 0.55), lineWidth: 0.8)
+                    .strokeBorder(
+                        LinearGradient(
+                            stops: [
+                                .init(color: Color.white.opacity(colorScheme == .dark ? 0.42 : 0.55), location: 0),
+                                .init(color: Color.white.opacity(0.05), location: 0.62),
+                            ],
+                            startPoint: .top, endPoint: .bottom
+                        ),
+                        lineWidth: max(0.5, tileSize * 0.022)
+                    )
             )
     }
 
@@ -469,7 +556,9 @@ private struct ClipboardHistoryRow: View {
                     )
                 )
             Image(systemName: symbol)
-                .font(.system(size: tileSize * 0.4, weight: .semibold))
+                // 0.46 与主列表 FileTile 无角标档同比例（files 分支走的就是它），
+                // 让四种载荷的符号视觉重量一致
+                .font(.system(size: tileSize * 0.46, weight: .semibold))
                 .symbolRenderingMode(.hierarchical)
                 .foregroundStyle(style.symbolGradient(dark: dark))
                 .shadow(color: style.color.opacity(dark ? 0.45 : 0.35), radius: tileSize * 0.05, y: tileSize * 0.04)

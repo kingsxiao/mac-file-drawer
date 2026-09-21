@@ -305,7 +305,7 @@ final class ShelfStore: ObservableObject {
     func removeDraggedOut(_ targets: [ShelfItem], trashed: Bool) {
         guard !targets.isEmpty else { return }
         let ids = Set(targets.map(\.id))
-        withAnimation(.spring(response: 0.32, dampingFraction: 0.8)) {
+        withAnimation(DrawerMotion.listChange) {
             releaseAuxState(ids: ids, paths: Set(targets.map(\.path)))
             items.removeAll { ids.contains($0.id) }
         }
@@ -692,7 +692,7 @@ final class ShelfStore: ObservableObject {
         guard next.count != items.count else { return }
         let kept = Set(next.map(\.id))
         let dropped = items.filter { !kept.contains($0.id) }
-        withAnimation(.spring(response: 0.32, dampingFraction: 0.8)) {
+        withAnimation(DrawerMotion.listChange) {
             releaseAuxState(ids: Set(dropped.map(\.id)), paths: Set(dropped.map(\.path)))
             items = next
         }

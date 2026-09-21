@@ -112,4 +112,77 @@ final class TileContrastTests: XCTestCase {
         XCTAssertGreaterThan(all.count, 20, "家族色应聚出可观的样本数")
         XCTAssertTrue(all.allSatisfy { $0.lightRatio >= 3.0 - 0.001 && $0.darkRatio >= 3.0 - 0.001 })
     }
+
+    // MARK: - 渐变徽章文字墨色（WCAG AA 4.5:1）
+
+    /// 文字门槛（AA）：与瓷片符号的图形门槛 3:1 区分
+    private static let textThreshold = 4.5
+
+    /// 渐变徽章（撤销「还原」/ 头部「已选 N」等）的墨色在明暗两模式、
+    /// 渐变两端上都 ≥4.5:1。此前体系只保瓷片符号 3:1，渐变徽章文字无校验——
+    /// 调亮渐变端色时白字/墨字会悄悄跌破 AA（历史值：白 on 深档品牌渐变 2.51–3.24）。
+    /// 规格来自 DrawerTheme.badgeInkSpecs（与色值定义同源，改色即改契约）
+    func testBadgeInkMeetsAAThresholdInBothModes() {
+        var failures: [String] = []
+        for spec in DrawerTheme.badgeInkSpecs {
+            for end in spec.ends {
+                let ratio = TypeColorContrast.contrastRatio(spec.ink, end)
+                if ratio < Self.textThreshold - 0.001 {
+                    failures.append(
+                        "\(spec.name)：墨色 \(String(format: "#%06X", spec.ink)) "
+                            + "on \(String(format: "#%06X", end)) = \(String(format: "%.2f", ratio))"
+                    )
+                }
+            }
+        }
+        XCTAssertTrue(failures.isEmpty, "渐变徽章墨色未达 AA 4.5:1：\n\(failures.joined(separator: "\n"))")
+    }
+
+    /// 选中青瓷直接作前景文字（头部搜索匹配计数）对典型材质底 ≥4.5:1
+    func testSelectionTextMeetsAAThresholdOnMaterialBases() {
+        var failures: [String] = []
+        for spec in DrawerTheme.selectionTextSpecs {
+            for base in spec.ends {
+                let ratio = TypeColorContrast.contrastRatio(spec.ink, base)
+                if ratio < Self.textThreshold - 0.001 {
+                    failures.append(
+                        "\(spec.name)：\(String(format: "%.2f", ratio))"
+                    )
+                }
+            }
+        }
+        XCTAssertTrue(failures.isEmpty, "匹配计数青瓷字未达 AA 4.5:1：\(failures.joined(separator: "，"))")
+    }
+
+    /// PDF 瓷片色必须与危险色拉开（失效警示红 ≠ PDF 红，避免语义误读）：
+    /// 色相距离 ≥15° 或明度差足够。新色自身仍受全目录 3:1 契约保护（上一测试）
+    func testPDFTileColorSeparatesFromDanger() {
+        func hue(_ hex: UInt32) -> Double {
+            let c = TypeColorContrast.components(hex)
+            let mx = max(c.r, c.g, c.b), mn = min(c.r, c.g, c.b)
+            guard mx > mn else { return 0 }
+            let d = mx - mn
+            var h: Double
+            if mx == c.r { h = ((c.g - c.b) / d).truncatingRemainder(dividingBy: 6) }
+            else if mx == c.g { h = (c.b - c.r) / d + 2 }
+            else { h = (c.r - c.g) / d + 4 }
+            h *= 60
+            if h < 0 { h += 360 }
+            return h
+        }
+        func lightness(_ hex: UInt32) -> Double {
+            let c = TypeColorContrast.components(hex)
+            return (max(c.r, c.g, c.b) + min(c.r, c.g, c.b)) / 2
+        }
+
+        let pdf = FileTypeCatalog.entries["pdf"]!.style.colorHex
+        let danger: UInt32 = 0xE0455F // DrawerTheme.danger 浅色档（明暗两档同族色相）
+        let rawDistance = abs(hue(pdf) - hue(danger))
+        let bounded = min(rawDistance, 360 - rawDistance)
+        let luminanceGap = abs(lightness(pdf) - lightness(danger))
+        XCTAssertTrue(
+            bounded >= 15 || luminanceGap >= 0.15,
+            "PDF 色应与危险色拉开（色相差 \(bounded)°、明度差 \(luminanceGap)）"
+        )
+    }
 }

@@ -177,7 +177,9 @@ enum FileTypeCatalog {
 
     static let entries: [String: Entry] = Dictionary(uniqueKeysWithValues: [
         // —— 文档
-        family(["pdf"], entry(.pdf, "doc.richtext.fill", 0xE0455F)),
+        // PDF 用珊瑚红（与 danger 玫瑰红拉开色相）：原值与危险色完全同值，
+        // 失效警示的红字 / 红瓷片容易被误读成同一件事
+        family(["pdf"], entry(.pdf, "doc.richtext.fill", 0xE2583E)),
         family(["doc", "docx", "docm", "odt", "rtf"], entry(.document, "doc.text.fill", 0x2B579A)),
         family(["pages"], entry(.document, "doc.text.fill", 0xE0862E)),
         family(["txt", "text", "log", "err"], entry(.document, "doc.plaintext.fill", 0x6E7B8A)),
@@ -328,7 +330,7 @@ enum FileTypeCatalog {
     static let imageFallback = FileIconStyle(symbolName: "photo.fill", hex: 0x2FA252)
     static let videoFallback = FileIconStyle(symbolName: "film.fill", hex: 0x7B52CC)
     static let audioFallback = FileIconStyle(symbolName: "waveform", hex: 0xC93A70)
-    static let pdfFallback = FileIconStyle(symbolName: "doc.richtext.fill", hex: 0xE0455F)
+    static let pdfFallback = FileIconStyle(symbolName: "doc.richtext.fill", hex: 0xE2583E)
     static let archiveFallback = FileIconStyle(symbolName: "doc.zipper", hex: 0xA76B1F)
     static let documentFallback = FileIconStyle(symbolName: "doc.plaintext.fill", hex: 0x6E7B8A)
     static let otherFallback = FileIconStyle(symbolName: "doc.fill", hex: 0x83898F)

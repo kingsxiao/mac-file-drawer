@@ -109,7 +109,7 @@ struct SearchBarView: View {
                 // 胶囊内唯一的 X：清空文本。关闭搜索走 Esc 或再点头部放大镜——
                 // 两个 X 比邻（清空 / 关闭）语义易混，关闭按钮已收敛到头部
                 Button {
-                    withAnimation(.easeOut(duration: 0.15)) { interaction.searchText = "" }
+                    withAnimation(DrawerMotion.fade) { interaction.searchText = "" }
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 11))
@@ -136,9 +136,9 @@ struct SearchBarView: View {
                         )
                 )
         )
-        .animation(.easeOut(duration: 0.18), value: focused.wrappedValue)
+        .animation(DrawerMotion.fade, value: focused.wrappedValue)
         .focused(focused)
-        .animation(.easeOut(duration: 0.15), value: interaction.searchText.isEmpty)
+        .animation(DrawerMotion.fade, value: interaction.searchText.isEmpty)
     }
 }
 
@@ -151,10 +151,10 @@ struct NoResultsView: View {
 
     var body: some View {
         VStack(spacing: 9) {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 22, weight: .light))
-                .foregroundStyle(DrawerTheme.accent.opacity(0.55))
-                .symbolEffect(.bounce, options: .nonRepeating, value: query)
+            // 无结果是「中性状态」不是品牌时刻：图标与按钮都不用彩色
+            //（设计稿 §九.1：搜索 UI 全程无彩色），对齐空态的 secondary 图标语言；
+            // 「减少动态」时跳过弹跳符号动效（只在关键词变化时静止出现）
+            magnifierIcon
             Text(L10n.tf("没有匹配「%@」的条目", query))
                 .font(.system(size: 12, weight: .medium))
 
@@ -163,8 +163,8 @@ struct NoResultsView: View {
                     .font(.system(size: 11, weight: .medium))
                     .padding(.horizontal, 12)
                     .padding(.vertical, 4.5)
-                    .background(Capsule().fill(DrawerTheme.accent.opacity(0.13)))
-                    .foregroundStyle(DrawerTheme.accent)
+                    .background(Capsule().fill(Color.primary.opacity(0.07)))
+                    .foregroundStyle(Color.primary)
             }
             .buttonStyle(PressScaleStyle(scale: 0.93))
             .help(L10n.t("清除搜索"))
@@ -175,6 +175,19 @@ struct NoResultsView: View {
         .offset(y: appeared ? 0 : 8)
         .onAppear {
             withAnimation(DrawerMotion.smooth) { appeared = true }
+        }
+    }
+
+    /// 放大镜图标：正常档随关键词变化轻弹一次；「减少动态」时不挂符号动效
+    @ViewBuilder
+    private var magnifierIcon: some View {
+        let icon = Image(systemName: "magnifyingglass")
+            .font(.system(size: 22, weight: .light))
+            .foregroundStyle(Color.secondary.opacity(0.75))
+        if DrawerMotion.reduceMotionEnabled {
+            icon
+        } else {
+            icon.symbolEffect(.bounce, options: .nonRepeating, value: query)
         }
     }
 }
@@ -200,7 +213,8 @@ struct UndoToastView: View {
             Button(action: onUndo) {
                 Text(L10n.t("还原"))
                     .font(.system(size: 11.5, weight: .semibold))
-                    .foregroundStyle(Color.white)
+                    // 品牌渐变上的墨色（浅档白 / 深档深靛墨）：两端均 ≥4.5:1（AA）
+                    .foregroundStyle(DrawerTheme.accentInk)
                     .padding(.horizontal, 9)
                     .padding(.vertical, 2.5)
                     .background(Capsule().fill(DrawerTheme.accentGradient))
@@ -334,7 +348,7 @@ struct PreviewOverlayView: View {
 
             Spacer(minLength: 4)
 
-            HoverCircleButton(systemImage: "xmark", tip: "关闭预览（Esc）", size: 19) {
+            HoverCircleButton(systemImage: "xmark", tip: L10n.t("关闭预览（Esc）"), size: 19) {
                 interaction.closePreview()
             }
         }
@@ -466,12 +480,13 @@ struct FileTile: View {
         }
         .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
         // 与类型瓷片同一道内缘高光，让两种瓷片属于同一套视觉语言
+        // （明暗分档与 glyphTile 一致：深色模式白高光收一档，否则在深底上发飘）
         .overlay(
             RoundedRectangle(cornerRadius: radius, style: .continuous)
                 .strokeBorder(
                     LinearGradient(
                         stops: [
-                            .init(color: Color.white.opacity(0.50), location: 0),
+                            .init(color: Color.white.opacity(colorScheme == .dark ? 0.42 : 0.55), location: 0),
                             .init(color: Color.white.opacity(0.05), location: 0.62),
                         ],
                         startPoint: .top, endPoint: .bottom
@@ -558,12 +573,24 @@ struct EmptyStateView: View {
     var isTargeted: Bool
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1 / 24, paused: isTargeted)) { context in
+        // 时间线只在拖入期间全速跑（1/24）：加速反转（-t*90）需要持续采样的
+        // context.date 才真正生效——此前 paused: isTargeted 把拖入态冻结，
+        // 加速只表现为一次跳变。空闲态降到 1/13（旋转 9°/s 下每帧 0.7°，
+        // 肉眼仍顺滑）削减常驻重绘；「减少动态」时整条时间线暂停，
+        // 呼吸浮动与旋转全部停住（拖入反馈交给描边与底色变化）
+        TimelineView(.animation(
+            minimumInterval: isTargeted ? 1 / 24 : 1 / 13,
+            paused: DrawerMotion.reduceMotionEnabled
+        )) { context in
             let t = context.date.timeIntervalSinceReferenceDate
             // 轻微呼吸浮动（3 秒一个周期）
-            let drift = isTargeted ? 0 : sin(t / 3 * 2 * .pi) * 3
+            let drift = isTargeted || DrawerMotion.reduceMotionEnabled
+                ? 0
+                : sin(t / 3 * 2 * .pi) * 3
             // 虚线环缓慢旋转；拖入时加速并反向，像"迎向"文件
-            let angle = isTargeted ? -t * 90 : t * 9
+            let angle = DrawerMotion.reduceMotionEnabled
+                ? 0
+                : (isTargeted ? -t * 90 : t * 9)
 
             VStack(spacing: 16) {
                 ZStack {

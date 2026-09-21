@@ -153,8 +153,20 @@ final class ClipboardHistoryStore: ObservableObject {
 
     /// 历史（最新在前）；置顶条目在展示层浮到最前，存储顺序仍是捕获顺序
     @Published private(set) var entries: [ClipboardEntry] = [] {
-        didSet { persist() }
+        didSet {
+            persist()
+            // 键盘选中锚点随列表回收：指向已不存在的条目时收回
+            // （淘汰 / 删除 / 清空后，下一次 ↑↓ 从头开始，与条目列表同构）
+            if let id = selectedEntryID, !entries.contains(where: { $0.id == id }) {
+                selectedEntryID = nil
+            }
+        }
     }
+
+    /// 历史视图的内联搜索词（上移到 store：键盘路由与视图要按同一查询算展示序列）
+    @Published var searchText = ""
+    /// 键盘选中锚点（↑↓ 移动、Return 收进、Delete 删除都作用于它）
+    @Published var selectedEntryID: UUID?
 
     private var timer: Timer?
     /// 监控的粘贴板（默认系统剪贴板；测试注入独立实例避免污染真实剪贴板）
@@ -299,6 +311,20 @@ final class ClipboardHistoryStore: ObservableObject {
         entries.removeAll()
     }
 
+    /// 键盘选中移动：在「当前查询的展示序列」里按步移动锚点（与条目列表的
+    /// moveSelection 同构——无锚点时 ↓ 选第一条、↑ 选最后一条，边界夹紧）
+    func moveSelection(by step: Int, matching query: String) {
+        let displayed = displayedEntries(matching: query)
+        guard !displayed.isEmpty else {
+            selectedEntryID = nil
+            return
+        }
+        let index = displayed.firstIndex { $0.id == selectedEntryID }
+            ?? (step > 0 ? -1 : displayed.count)
+        let next = min(max(index + step, 0), displayed.count - 1)
+        selectedEntryID = displayed[next].id
+    }
+
     /// 置顶在前、其余按捕获顺序（最新在前）的展示序列
     func displayedEntries(matching query: String) -> [ClipboardEntry] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -372,6 +398,19 @@ final class ClipboardHistoryStore: ObservableObject {
         guard !urls.isEmpty else { return (0, 0, 1) }
         let result = store.add(urls: urls)
         return (result.added, result.skippedDuplicates, 0)
+    }
+
+    /// 收进抽屉 + 轻提示反馈：键盘 Return 与历史视图的行点击 / 悬停按钮共用同一入口，
+    /// 反馈口径（已收进 / 已有重复 / 内容失效）只在这一处维护
+    func adopt(_ entry: ClipboardEntry, withFeedbackIn store: ShelfStore) {
+        let result = adopt(entry, into: store)
+        if result.added > 0 {
+            store.postNotice(L10n.tf("已收进「%@」", ClipboardCapture.title(of: entry.payload)))
+        } else if result.skippedDuplicates > 0 {
+            store.postNotice(L10n.t("抽屉里已有该条目"))
+        } else {
+            store.postNotice(L10n.t("内容已失效，未能收进抽屉"))
+        }
     }
 
     // MARK: 持久化

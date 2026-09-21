@@ -160,6 +160,8 @@ final class InteractionModel: ObservableObject {
     var onCollapseChange: ((Bool) -> Void)?
     /// 递增 token：让搜索框聚焦的时机可控（Cmd+F / 点放大镜）
     @Published var searchFocusToken = 0
+    /// 递增 token：剪贴板历史视图自带搜索框的聚焦时机（⌘F 在历史视图内的落点）
+    @Published var historyFocusToken = 0
     /// 行内拖拽排序：当前悬停的目标行（插入指示条），无拖拽时为 nil
     @Published var reorderTargetID: UUID?
     /// 行内拖拽排序的落点方位：true = 插到目标行后（下缘指示条），false = 目标行前。
@@ -303,6 +305,15 @@ final class InteractionModel: ObservableObject {
         }
     }
 
+    /// 搜索激活时新放入的条目是否全部被过滤隐藏（拖入松手后的反馈判定）：
+    /// 全部隐藏 = 列表纹丝不动形同无反馈，调用方据此轻提示去向；
+    /// 空搜索词 / 空集合 / 有可见新条目时一律不提示
+    nonisolated static func dropHiddenBySearch(_ added: [ShelfItem], query: String) -> Bool {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !added.isEmpty, !trimmed.isEmpty else { return false }
+        return filter(added, query: trimmed).isEmpty
+    }
+
     nonisolated static func sorted(_ items: [ShelfItem], by mode: SortMode) -> [ShelfItem] {
         switch mode {
         case .timeNewestFirst:
@@ -419,7 +430,7 @@ final class InteractionModel: ObservableObject {
             return
         }
         selectedID = item.id
-        withAnimation(.spring(response: 0.32, dampingFraction: 0.8)) {
+        withAnimation(DrawerMotion.listChange) {
             isPreviewVisible.toggle()
         }
     }
@@ -432,8 +443,17 @@ final class InteractionModel: ObservableObject {
     }
 
     func requestSearchFocus() {
-        isSearchVisible = true
+        // 包弹簧：isSearchVisible 驱动搜索框的 move+opacity transition，
+        // 裸赋值会让 ⌘F / 点放大镜的展开硬弹出（与头部按钮同一入口同一手感）
+        withAnimation(DrawerMotion.listChange) {
+            isSearchVisible = true
+        }
         searchFocusToken += 1
+    }
+
+    /// 历史视图搜索框聚焦：仅递增 token（视图存在与否由 showClipboardHistory 决定）
+    func requestHistoryFocus() {
+        historyFocusToken += 1
     }
 
     func clearSearchAndHideIfNeeded() {

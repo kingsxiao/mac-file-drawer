@@ -81,4 +81,14 @@ final class SearchQuerySyntaxTests: XCTestCase {
         XCTAssertEqual(InteractionModel.filter(all, query: "swift pdf").map(\.name), ["Swift方案.pdf"])
         XCTAssertEqual(InteractionModel.filter(all, query: "swift 不存在").count, 0)
     }
+
+    /// 拖入反馈判定：搜索激活且新条目全部被过滤才提示；空词 / 空集合 / 部分可见不提示
+    func testDropHiddenBySearch() {
+        let all = items()
+        XCTAssertTrue(InteractionModel.dropHiddenBySearch(all, query: "报价单"), "全部不匹配：列表纹丝不动，应提示")
+        XCTAssertFalse(InteractionModel.dropHiddenBySearch(all, query: "swift"), "部分可见（main.swift）已有视觉反馈，不提示")
+        XCTAssertFalse(InteractionModel.dropHiddenBySearch(all, query: ""), "无搜索词：列表直接可见新条目，不提示")
+        XCTAssertFalse(InteractionModel.dropHiddenBySearch(all, query: "   "), "空白搜索词视同无搜索")
+        XCTAssertFalse(InteractionModel.dropHiddenBySearch([], query: "报价单"), "空集合（全被去重跳过等）不提示")
+    }
 }

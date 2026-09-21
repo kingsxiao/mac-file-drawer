@@ -305,4 +305,103 @@ final class ClipboardHistoryTests: XCTestCase {
             L10n.tf("%@ 等 %d 个文件", "报告.pdf", 2)
         )
     }
+
+    // MARK: - 历史视图键盘集（↑↓ 选中锚点 / 搜索状态上移）
+
+    /// 无锚点 ↓ 选第一条、↑ 选最后一条；边界夹紧（与条目列表 moveSelection 同构）
+    func testMoveSelectionFromScratchAndClamp() {
+        store.insert(payload: .text("第一条"), sourceBundleID: nil, sourceAppName: nil)
+        store.insert(payload: .text("第二条"), sourceBundleID: nil, sourceAppName: nil)
+        store.insert(payload: .text("第三条"), sourceBundleID: nil, sourceAppName: nil)
+
+        store.moveSelection(by: 1, matching: "")
+        XCTAssertEqual(store.selectedEntryID, store.entries.first?.id, "无锚点 ↓ 应选第一条（展示首行）")
+
+        store.moveSelection(by: 1, matching: "")
+        XCTAssertEqual(store.selectedEntryID, store.entries[1].id)
+
+        store.moveSelection(by: -5, matching: "")
+        XCTAssertEqual(store.selectedEntryID, store.entries.first?.id, "向上越界应夹在第一条")
+
+        store.moveSelection(by: 5, matching: "")
+        XCTAssertEqual(store.selectedEntryID, store.entries.last?.id, "向下越界应夹在最后一条")
+
+        store.selectedEntryID = nil
+        store.moveSelection(by: -1, matching: "")
+        XCTAssertEqual(store.selectedEntryID, store.entries.last?.id, "无锚点 ↑ 应选最后一条")
+    }
+
+    /// 选中移动尊重当前搜索过滤：只在匹配序列内移动；锚点被过滤掉时从头计位
+    func testMoveSelectionRespectsSearchQuery() {
+        store.insert(payload: .text("季度报告甲"), sourceBundleID: nil, sourceAppName: nil)
+        store.insert(payload: .text("购物清单乙"), sourceBundleID: nil, sourceAppName: nil)
+        store.insert(payload: .text("季度总结丙"), sourceBundleID: nil, sourceAppName: nil)
+
+        store.searchText = "季度"
+        store.moveSelection(by: 1, matching: store.searchText)
+        let firstMatch = store.displayedEntries(matching: store.searchText).first
+        XCTAssertEqual(store.selectedEntryID, firstMatch?.id, "搜索下 ↓ 应选首个匹配")
+
+        store.moveSelection(by: 1, matching: store.searchText)
+        XCTAssertEqual(
+            store.selectedEntryID,
+            store.displayedEntries(matching: store.searchText).last?.id,
+            "搜索序列只有两条：再 ↓ 应到末位"
+        )
+
+        // 锚点指向被过滤掉的条目时，按方向从头计位（KeyboardRouter 的 Delete 轮播
+        // 依赖 displayed 序列，视图层 onChange(searchText) 负责收回失配锚点）
+        store.searchText = "购物"
+        store.moveSelection(by: 1, matching: store.searchText)
+        XCTAssertEqual(store.selectedEntryID, store.entries[1].id)
+    }
+
+    /// 空结果集上移动选中：锚点收回，不崩溃
+    func testMoveSelectionOnEmptyDisplayClearsAnchor() {
+        store.insert(payload: .text("唯一"), sourceBundleID: nil, sourceAppName: nil)
+        store.searchText = "不存在的关键词"
+        store.selectedEntryID = store.entries[0].id
+        store.moveSelection(by: 1, matching: store.searchText)
+        XCTAssertNil(store.selectedEntryID, "过滤后列表为空应收回锚点")
+    }
+
+    /// 锚点随列表回收：删除 / 清空后指向失效条目即置 nil
+    func testSelectedAnchorReclaimedOnRemovalAndClear() {
+        store.insert(payload: .text("甲"), sourceBundleID: nil, sourceAppName: nil)
+        store.insert(payload: .text("乙"), sourceBundleID: nil, sourceAppName: nil)
+        store.selectedEntryID = store.entries[0].id
+
+        store.removeEntry(id: store.entries[0].id)
+        XCTAssertNil(store.selectedEntryID, "删除锚点条目后应收回锚点")
+
+        store.selectedEntryID = store.entries[0].id
+        store.clear()
+        XCTAssertNil(store.selectedEntryID, "清空后应收回锚点")
+    }
+
+    /// 收进抽屉 + 反馈共用入口：三种结果分别给出对应轻提示文案
+    func testAdoptWithFeedbackPostsNotices() throws {
+        let shelf = ShelfStore.shared
+        let original = shelf.items
+        defer { shelf.items = original }
+
+        // 文本载荷：物化成功 → 「已收进」
+        store.insert(payload: .text("待收进文本"), sourceBundleID: nil, sourceAppName: nil)
+        store.adopt(store.entries[0], withFeedbackIn: shelf)
+        XCTAssertEqual(shelf.notice, L10n.tf("已收进「%@」", "待收进文本"), "成功收进应提示标题")
+
+        // 文件载荷：同一路径第二次收进 → 「抽屉里已有该条目」（文本每次物化新文件不触发）
+        let file = inbox.appendingPathComponent("重复样本.txt")
+        try "内容".write(to: file, atomically: true, encoding: .utf8)
+        store.insert(payload: .files([file.path]), sourceBundleID: nil, sourceAppName: nil)
+        store.adopt(store.entries[0], withFeedbackIn: shelf)
+        XCTAssertEqual(shelf.notice, L10n.tf("已收进「%@」", "重复样本.txt"))
+        store.adopt(store.entries[0], withFeedbackIn: shelf)
+        XCTAssertEqual(shelf.notice, L10n.t("抽屉里已有该条目"), "同路径再收进应提示已存在")
+
+        // 路径已不存在 → 「内容已失效」
+        store.insert(payload: .files(["/tmp/不存在-\(UUID().uuidString).pdf"]), sourceBundleID: nil, sourceAppName: nil)
+        store.adopt(store.entries[0], withFeedbackIn: shelf)
+        XCTAssertEqual(shelf.notice, L10n.t("内容已失效，未能收进抽屉"), "失效载荷应提示未收进")
+    }
 }

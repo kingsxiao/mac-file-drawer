@@ -55,11 +55,64 @@ final class KeyboardRouter {
         )
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
 
-        // Cmd+F 聚焦/显示搜索框
+        // Cmd+F 聚焦/显示搜索框（历史视图里聚焦历史自带的搜索框）
         if flags == .command, event.keyCode == 3 { // F
-            model.requestSearchFocus()
+            if model.showClipboardHistory {
+                model.requestHistoryFocus()
+            } else {
+                model.requestSearchFocus()
+            }
             return nil
         }
+        // Cmd+Z 撤销最近一次移除（与撤销 toast 同一还原入口；无快照放行给系统）
+        if flags == .command, event.keyCode == 6 { // Z
+            guard store.undoSnapshot != nil else { return event }
+            store.undoLastRemoval()
+            return nil
+        }
+        // 剪贴板历史视图：键盘属于历史条目列表——↑↓ 移动选中、Return 收进抽屉、
+        // Delete 删除。其余按键（Space 预览 / ⌘C ⌘A / Home End PageUp / ⌘1-9…）
+        // 不得作用于不可见的抽屉条目列表，除 Esc 返回与 ⌘⇧V 切换外全部放行给系统
+        if model.showClipboardHistory {
+            let history = ClipboardHistoryStore.shared
+            switch Int(event.keyCode) {
+            case 125, 126: // Down / Up
+                history.moveSelection(by: event.keyCode == 125 ? 1 : -1, matching: history.searchText)
+                return nil
+
+            case 36, 76: // Return / Enter：收进抽屉（反馈与行点击同一入口）
+                if let id = history.selectedEntryID,
+                   let entry = history.entries.first(where: { $0.id == id }) {
+                    withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) {
+                        history.adopt(entry, withFeedbackIn: store)
+                    }
+                    return nil
+                }
+
+            case 51: // Delete：删除选中历史条目（锚点接到相邻条目，与条目列表删除轮播同构）
+                if let id = history.selectedEntryID {
+                    let displayed = history.displayedEntries(matching: history.searchText)
+                    let index = displayed.firstIndex { $0.id == id }
+                    withAnimation(DrawerMotion.listChange) {
+                        history.removeEntry(id: id)
+                        if let index, displayed.indices.contains(index + 1) {
+                            history.selectedEntryID = displayed[index + 1].id
+                        } else if let index, index > 0 {
+                            history.selectedEntryID = displayed[index - 1].id
+                        }
+                    }
+                    return nil
+                }
+
+            default:
+                break
+            }
+            // Esc（返回抽屉）与 ⌘⇧V（切回条目列表）交给下面的既有分支处理
+            if event.keyCode != 53, !(flags == [.command, .shift] && event.keyCode == 9) {
+                return event
+            }
+        }
+
         // Cmd+C 拷贝选中条目的文件（与访达拷贝同构；多选时全部拷贝）
         if flags == .command, event.keyCode == 8 { // C
             let targets = model.selectedItems(in: displayed)
@@ -108,14 +161,26 @@ final class KeyboardRouter {
             return nil
         }
 
-        // Cmd+↑ / Cmd+↓：手动排序下平移选中条目（自动切入「手动顺序」）
-        if flags == .command, event.keyCode == 126 || event.keyCode == 125 {
+        // ⌃⌘↑ / ⌃⌘↓：手动排序下平移选中条目（自动切入「手动顺序」）。
+        // 平移自 ⌘↑⌘↓ 迁来：⌘↓ 让位给下方「打开选中项」的系统列表惯例
+        if flags == [.command, .control], event.keyCode == 126 || event.keyCode == 125 {
             let targets = model.selectedItems(in: displayed)
             guard !targets.isEmpty else { return event }
             withAnimation(DrawerMotion.smooth) {
                 model.switchToManualPreservingDisplay(store: store, drawerID: store.currentDrawerID)
                 store.nudge(ids: targets.map(\.id), by: event.keyCode == 126 ? -1 : 1)
             }
+            return nil
+        }
+
+        // Cmd+↓：打开选中文件（与 Return 同语义，与访达等系统列表的惯例对齐）；
+        // Cmd+↑ 在扁平列表无对应系统惯例，放行给系统不强占
+        if flags == .command, event.keyCode == 125 {
+            let targets = model.selectedItems(in: displayed)
+            guard !targets.isEmpty else { return event }
+            let openable = targets.filter { !store.missingIDs.contains($0.id) }
+            if openable.count < targets.count { NSSound.beep() }
+            for item in openable { NSWorkspace.shared.open(item.url) }
             return nil
         }
 
@@ -144,13 +209,13 @@ final class KeyboardRouter {
                 return nil
             }
             if model.selectedID != nil {
-                withAnimation(.easeOut(duration: 0.15)) { model.selectedID = nil }
+                withAnimation(DrawerMotion.fade) { model.selectedID = nil }
                 return nil
             }
             if model.isSearchVisible {
                 // 有文本先清空，再按一次才收起搜索框（与常见搜索交互一致）
                 if !model.searchText.isEmpty {
-                    withAnimation(.easeOut(duration: 0.15)) { model.searchText = "" }
+                    withAnimation(DrawerMotion.fade) { model.searchText = "" }
                 } else {
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
                         model.clearSearchAndHideIfNeeded()
@@ -210,7 +275,7 @@ final class KeyboardRouter {
                    displayed.indices.contains(index + 1) {
                     carouselNext = displayed[index + 1]
                 }
-                withAnimation(.spring(response: 0.32, dampingFraction: 0.8)) {
+                withAnimation(DrawerMotion.listChange) {
                     store.remove(targets)
                     if let carouselNext {
                         model.select(carouselNext)
@@ -429,7 +494,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         let model = InteractionModel.shared
         model.closePreview()
-        withAnimation(.easeOut(duration: 0.15)) { model.selectedID = nil }
+        withAnimation(DrawerMotion.fade) { model.selectedID = nil }
         model.isCollapsed = true // observer 里驱动边框动画
         isOpen = false
         refreshStatusTitle()
@@ -653,6 +718,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let editMenuItem = NSMenuItem(title: L10n.t("编辑"), action: nil, keyEquivalent: "")
         let editMenu = NSMenu(title: L10n.t("编辑"))
+        // 撤销放编辑菜单首项（macOS 惯例位）：⌘Z 有菜单可发现性；
+        // 无还原快照时禁用（validateMenuItem 每次打开菜单时重估）
+        editMenu.addItem(withTitle: L10n.t("撤销"), action: #selector(undoAction), keyEquivalent: "z")
+        editMenu.addItem(.separator())
         editMenu.addItem(withTitle: L10n.t("剪切"), action: #selector(NSText.cut(_:)), keyEquivalent: "x")
         editMenu.addItem(withTitle: L10n.t("拷贝"), action: #selector(NSText.copy(_:)), keyEquivalent: "c")
         editMenu.addItem(withTitle: L10n.t("粘贴"), action: #selector(NSText.paste(_:)), keyEquivalent: "v")
@@ -664,6 +733,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func toggleAction() { toggleDrawer() }
+
+    /// 菜单「撤销 ⌘Z」：还原最近一次移除（与撤销 toast / 键盘 ⌘Z 同一入口）
+    @objc private func undoAction() {
+        ShelfStore.shared.undoLastRemoval()
+    }
 
     @objc private func handleToggleDrawer() {
         toggleDrawer()
@@ -679,7 +753,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func exportDiagnosticsAction() {
         let dlg = NSSavePanel()
         dlg.canCreateDirectories = true
-        dlg.nameFieldStringValue = "FileDrawer-诊断.txt"
+        dlg.nameFieldStringValue = L10n.t("FileDrawer-诊断.txt")
         dlg.prompt = L10n.t("导出")
         guard dlg.runModal() == .OK, let url = dlg.url else { return }
         do {
@@ -702,10 +776,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let build = bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "dev"
         let store = ShelfStore.shared
         let stats = L10n.tf("当前 %d 个条目 · %d 个分组", store.items.count, store.drawers.count)
+        // 呼出方式按热键实际状态描述（热键默认关闭，别教用户按一个没启用的组合）；
+        // 写法统一「⌥ Space」（与设置页 displayLabel 同源）
+        let hotKeyLabel = settings.hotKeyEnabled
+            ? (settings.hotKeyBinding?.displayLabel ?? "⌥ Space")
+            : nil
+        let summonLine = hotKeyLabel.map { L10n.tf("%@ 呼出抽屉 · 右键条目看全部操作", $0) }
+            ?? L10n.t("菜单栏 / Dock 图标呼出抽屉 · 右键条目看全部操作")
         let credits = [
             stats,
             L10n.t("Swift + AppKit + SwiftUI · 无第三方依赖"),
-            L10n.t("⌥Space 呼出抽屉 · 右键条目看全部操作"),
+            summonLine,
             L10n.t("自动化：filedrawer:// URL 与快捷指令（Shortcuts）"),
         ].joined(separator: "\n")
         NSApp.orderFrontStandardAboutPanel(options: [
@@ -746,8 +827,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// 清空当前分组：批量移除体感不可逆，先弹确认（@objc 菜单动作上下文没有
+    /// SwiftUI 承载视图，走 AppKit NSAlert——先例为导出结果弹窗；文案语言对齐
+    /// 剪贴板历史的清空确认）。清空本身带撤销快照，可在提示条上「还原」
     @objc private func clearAction() {
-        ShelfStore.shared.clear()
+        let store = ShelfStore.shared
+        guard !store.currentItems.isEmpty else {
+            NSSound.beep()
+            return
+        }
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = L10n.tf("清空「%@」？", store.currentDrawerName)
+        alert.informativeText = L10n.t("条目将从抽屉移除，源文件保留在原位；清空后可在提示条上「还原」。")
+        alert.addButton(withTitle: L10n.t("清空"))
+        alert.addButton(withTitle: L10n.t("取消"))
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        // 收起态经菜单栏触发时展开抽屉呈现上下文：清空的退场动画与撤销 toast
+        // 都看得见（防自动收起的竞态不靠它——见 collapseIfEmptyAfterRemoval 的快照守卫）
+        expandDrawer()
+        store.clear() // 退场动画在 store 内（withAnimation），调用侧不再包
     }
 
     /// 菜单栏「剪贴板历史…」：展开抽屉并直接进入历史视图
@@ -887,5 +986,16 @@ extension AppDelegate: NSMenuDelegate {
     func menuWillOpen(_ menu: NSMenu) {
         // 原地重建：切换项文案 + 最近条目保持最新（同一个 NSMenu 实例，避免打断正在打开的菜单）
         populateStatusMenu(menu)
+    }
+}
+
+// 菜单项验证：撤销只在存在还原快照时可用（主菜单 autoenablesItems 每次打开时回调；
+// 撤销项的 nil-target action 沿响应链落到 NSApp.delegate = 这里）
+extension AppDelegate: NSMenuItemValidation {
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        if menuItem.action == #selector(undoAction) {
+            return ShelfStore.shared.undoSnapshot != nil
+        }
+        return true
     }
 }

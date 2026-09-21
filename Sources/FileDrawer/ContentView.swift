@@ -33,7 +33,7 @@ struct ContentView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .animation(.spring(response: 0.4, dampingFraction: 0.9), value: interaction.isCollapsed)
+        .animation(DrawerMotion.expand, value: interaction.isCollapsed)
         .overlay {
             if !interaction.isCollapsed {
                 dropHighlight
@@ -48,6 +48,11 @@ struct ContentView: View {
         .onChange(of: store.items) {
             interaction.reconcileAfterListChange(with: displayedItems)
             collapseIfEmptyAfterRemoval()
+        }
+        // 还原快照消费（还原 / 关闭提示条 / 自动超时）后补一次收起评估：
+        // 清空瞬间的收起为撤销 toast 让路被推迟，这里接续（见 collapseIfEmptyAfterRemoval）
+        .onChange(of: store.undoSnapshot) { _, snapshot in
+            if snapshot == nil { collapseIfEmptyAfterRemoval() }
         }
         // 切换分组：选中 / 预览随新分组的可见性收回，条目重新错峰入场
         .onChange(of: store.currentDrawerID) {
@@ -73,13 +78,19 @@ struct ContentView: View {
         )
     }
 
-    /// 设置开启「清空后自动收起」且当前分组刚被清空时，滑回收起边条
+    /// 设置开启「清空后自动收起」且当前分组刚被清空时，滑回收起边条。
+    /// 有未消费的还原快照时推迟：清空后 0.35s 就滑回收起态会把撤销 toast 一起
+    /// 带走（UndoToastView.onDisappear 只取消自动丢弃、不触发 discardUndo，
+    /// 快照会滞留到下次展开），还原入口名存实亡——快照消费后由
+    /// onChange(of: store.undoSnapshot) 再次评估接续收起
     private func collapseIfEmptyAfterRemoval() {
         guard settings.collapseWhenEmpty,
               store.currentItems.isEmpty,
               !interaction.isCollapsed else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
             guard store.currentItems.isEmpty, !interaction.isCollapsed else { return }
+            // 还原窗口还开着：继续让 toast 可达，等快照消费后再收
+            guard store.undoSnapshot == nil else { return }
             NotificationCenter.default.post(name: .toggleDrawer, object: nil)
         }
     }
@@ -161,7 +172,7 @@ struct ContentView: View {
                         Spacer(minLength: 0)
                     } else if displayedItems.isEmpty {
                         NoResultsView(query: interaction.searchText) {
-                            withAnimation(.easeOut(duration: 0.18)) { interaction.searchText = "" }
+                            withAnimation(DrawerMotion.fade) { interaction.searchText = "" }
                         }
                     } else {
                         itemList(displayedItems)
@@ -266,7 +277,7 @@ struct ContentView: View {
         }
         .buttonStyle(PressScaleStyle(scale: 0.92))
         .iconHoverState($handleHovered, animation: .spring(response: 0.28, dampingFraction: 0.7))
-        .animation(.easeOut(duration: 0.15), value: isDropTargeted)
+        .animation(DrawerMotion.fade, value: isDropTargeted)
         .help(L10n.t("收起成边条"))
         .accessibilityLabel(L10n.t("收起成边条"))
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: settings.edge == .right ? .leading : .trailing)
@@ -329,7 +340,7 @@ struct ContentView: View {
                     .transition(.opacity)
                 }
             }
-            .animation(.easeOut(duration: 0.14), value: isDropTargeted)
+            .animation(DrawerMotion.fade, value: isDropTargeted)
             .overlay(alignment: .center) {
                 if isDropTargeted {
                     Label("松开，放入抽屉", systemImage: "plus.view")
@@ -388,13 +399,16 @@ struct ContentView: View {
                 .padding(.top, settings.compactRows ? 7 : 9)
                 // toast 悬浮期间列表底部让位：最后一行不再被撤销 / 轻提示盖住
                 .padding(.bottom, store.undoSnapshot != nil || store.notice != nil ? 64 : 12)
+                // 搜索词变化驱动的行增删：行上已声明 insertion/removal transition，
+                // 这里绑值让过滤结果的变化也走弹簧（此前只有 items 变化时才有动画）
+                .animation(DrawerMotion.listChange, value: interaction.searchText)
             }
             .scrollBounceBehavior(.basedOnSize)
             // 拖入悬停：列表内容退后（描边与「松开」徽章上前）——「内容让位给新文件」。
             // 空态不在此路径（有自己的 targeted 表现）
             .opacity(isDropTargeted ? 0.55 : 1)
             .scaleEffect(isDropTargeted ? 0.985 : 1)
-            .animation(.easeOut(duration: 0.14), value: isDropTargeted)
+            .animation(DrawerMotion.fade, value: isDropTargeted)
             // 键盘 ↑↓ 移动选中时，选中行平滑滚入视野
             .onChange(of: interaction.selectedID) {
                 guard let id = interaction.selectedID else { return }
@@ -511,7 +525,7 @@ private struct DrawerDropDelegate: DropDelegate {
     /// 收起态时先把抽屉滑出来接住文件（受设置控制）
     private func revealIfNeeded() {
         if interaction.isCollapsed, AppSettings.shared.expandOnDragHover {
-            withAnimation(.spring(response: 0.4, dampingFraction: 0.9)) {
+            withAnimation(DrawerMotion.expand) {
                 interaction.isCollapsed = false
             }
         }
@@ -529,9 +543,16 @@ private struct DrawerDropDelegate: DropDelegate {
                 if InteractionModel.shared.showClipboardHistory {
                     InteractionModel.shared.showClipboardHistory = false
                 }
+                let existingIDs = Set(store.currentItems.map(\.id))
                 let result = store.add(urls: urls)
                 if result.skippedDuplicates > 0 {
                     store.postNotice(L10n.tf("已跳过 %d 个重复条目", result.skippedDuplicates))
+                }
+                // 搜索激活时新条目可能全部被过滤隐藏：松手后列表纹丝不动形同
+                // 无反馈，轻提示告知去向（词为空 / 有可见新条目时保持静默）
+                let addedItems = store.currentItems.filter { !existingIDs.contains($0.id) }
+                if InteractionModel.dropHiddenBySearch(addedItems, query: InteractionModel.shared.searchText) {
+                    store.postNotice(L10n.tf("已放入 %d 个条目 · 被当前搜索过滤隐藏", addedItems.count))
                 }
             }
         }
@@ -639,22 +660,31 @@ private struct HeaderView: View {
     @ViewBuilder
     private var countFootnote: some View {
         let searching = interaction.isSearchVisible && !interaction.searchText.isEmpty
-        if searching {
-            // 匹配计数是「当前视图状态」信号，用选中色系；0 命中也显示（本身是重要信息）
-            Text(L10n.tf("%d/%d", displayedCount, store.currentItems.count))
-                .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                .monospacedDigit()
-                .contentTransition(.numericText())
-                .foregroundStyle(DrawerTheme.selection)
-                .help(L10n.t("搜索匹配数 / 分组总数"))
-        } else if !store.currentItems.isEmpty {
-            Text("\(store.currentItems.count)")
-                .font(.system(size: 10, weight: .medium, design: .monospaced))
-                .monospacedDigit()
-                .contentTransition(.numericText())
-                .foregroundStyle(.tertiary)
-                .transition(.scale(scale: 0.6).combined(with: .opacity))
+        Group {
+            if searching {
+                // 匹配计数是「当前视图状态」信号，用选中色系；0 命中也显示（本身是重要信息）
+                Text(L10n.tf("%d/%d", displayedCount, store.currentItems.count))
+                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                    .monospacedDigit()
+                    .contentTransition(.numericText())
+                    .foregroundStyle(DrawerTheme.selection)
+                    .help(L10n.t("搜索匹配数 / 分组总数"))
+                    // 「3/12」对 VoiceOver 无语义，朗读完整语句
+                    .accessibilityLabel(L10n.tf("搜索匹配 %d 个，分组共 %d 个", displayedCount, store.currentItems.count))
+                    .transition(.scale(scale: 0.6).combined(with: .opacity))
+            } else if !store.currentItems.isEmpty {
+                Text("\(store.currentItems.count)")
+                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .monospacedDigit()
+                    .contentTransition(.numericText())
+                    .foregroundStyle(.tertiary)
+                    .transition(.scale(scale: 0.6).combined(with: .opacity))
+                    // 裸数字计数同样不被朗读，给足语义
+                    .accessibilityLabel(L10n.tf("分组内 %d 个条目", store.currentItems.count))
+            }
         }
+        // 两分支的显隐切换有过渡（搜入 / 退出搜索时计数形态平滑交接）
+        .animation(DrawerMotion.fade, value: searching)
     }
 
     /// 分组切换器：当前分组名 + 下拉菜单（切换 / 新建 / 重命名 / 删除）
@@ -704,7 +734,8 @@ private struct HeaderView: View {
         .menuIndicator(.hidden)
         .fixedSize()
         .help(L10n.t("切换 / 管理分组"))
-        .accessibilityLabel(L10n.t("切换 / 管理分组"))
+        // 标签并入当前分组名：菜单收起时 VO 只读得到标签，可见分组名不能被吞掉
+        .accessibilityLabel(L10n.tf("切换 / 管理分组，当前「%@」", store.currentDrawerName))
         .alert(L10n.t("新建分组…"), isPresented: $newDrawerVisible) {
             TextField(L10n.t("分组名"), text: $newDrawerName)
             Button(L10n.t("新建")) {
@@ -719,7 +750,7 @@ private struct HeaderView: View {
             Button(L10n.t("重命名")) {
                 store.renameDrawer(id: store.currentDrawerID, to: renameDrawerName)
             }
-            Button("取消", role: .cancel) {}
+            Button(L10n.t("取消"), role: .cancel) {}
         } message: {
             Text(L10n.t("与其他分组重名会被忽略。"))
         }
@@ -732,7 +763,7 @@ private struct HeaderView: View {
         return Menu {
             ForEach(InteractionModel.SortMode.allCases) { mode in
                 Button {
-                    withAnimation(.easeOut(duration: 0.18)) {
+                    withAnimation(DrawerMotion.fade) {
                         interaction.setSortMode(mode, for: store.currentDrawerID)
                     }
                     // 菜单跟踪期间 onHover 不派发，选中后显式熄灭，避免圆底卡亮
@@ -768,6 +799,8 @@ private struct HeaderView: View {
         .iconHoverState($sortHovered)
         .help(L10n.t("排序（仅当前分组）"))
         .accessibilityLabel(L10n.t("排序（仅当前分组）"))
+        // 图标标签恒定：当前排序作为值播报（VO 读「排序（仅当前分组），手动顺序，按钮」）
+        .accessibilityValue(currentSort.label)
     }
 }
 
@@ -922,6 +955,18 @@ private struct ItemRow: View {
         .accessibilityLabel(accessibilityDescription)
         .accessibilityHint(settings.openOnSingleClick ? L10n.t("双击打开文件") : L10n.t("单击选中，双击打开文件"))
         .accessibilityAddTraits(.isButton)
+        // 选中态外显为 VoiceOver 选中 trait（与键盘选中同一状态源）
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        // VO+Space / 辅助技术的默认激活：单击模式直接打开，否则先选中
+        //（onTapGesture 不产生 AXPress，仿 ClipboardHistoryRow 的显式注册先例）
+        .accessibilityAction {
+            if settings.openOnSingleClick {
+                selectRow()
+                openItem()
+            } else {
+                selectRow()
+            }
+        }
         .onHover { hovering in
             withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                 hovered = hovering
@@ -949,7 +994,7 @@ private struct ItemRow: View {
             }
             if !isMultiselectClick { lastRowClickAt = Date() }
             DrawerPanel.active?.makeKeyAndOrderFront(nil)
-            withAnimation(.easeOut(duration: 0.15)) {
+            withAnimation(DrawerMotion.fade) {
                 if flags.contains(.command) {
                     interaction.toggleSelect(item)
                 } else if flags.contains(.shift) {
@@ -992,7 +1037,7 @@ private struct ItemRow: View {
                     NSSound.beep()
                 }
             }
-            Button("取消", role: .cancel) {}
+            Button(L10n.t("取消"), role: .cancel) {}
         } message: {
             Text(L10n.t("将同时修改磁盘上的文件；同名文件会自动追加序号。"))
         }
@@ -1071,7 +1116,7 @@ private struct ItemRow: View {
                   ? L10n.tf("拖动瓷片拖出整批（%d 个）· 按住 ⌘ 拖到访达 = 移动", batchDragTargets.count)
                   : L10n.t("拖动瓷片拖出文件 · 按住 ⌘ 拖到访达 = 移动 · 拖到废纸篓 = 删除"))
             .scaleEffect(hovered ? 1.07 : 1)
-            .animation(.spring(response: 0.28, dampingFraction: 0.6), value: hovered)
+            .animation(DrawerMotion.iconHover, value: hovered)
     }
 
     private var metaLine: String { item.metaLine(settings: settings) }
@@ -1165,7 +1210,7 @@ private struct ItemRow: View {
             break
         case .removeUndoable:
             // 拷贝完成 + 开了「拖出后移除」：源文件仍在原位，还原快照有意义
-            withAnimation(.spring(response: 0.32, dampingFraction: 0.8)) {
+            withAnimation(DrawerMotion.listChange) {
                 store.remove(targets)
             }
         case .removeSilently(let trashed):
@@ -1227,8 +1272,19 @@ private struct ItemRow: View {
             }
         }
         Divider()
-        Button(L10n.t("拷贝文件") + countSuffix(targets)) { ClipboardSupport.copyFiles(targets) }
-        Button(L10n.t("拷贝路径") + countSuffix(targets)) { copyPaths(targets) }
+        // 多选拷贝补轻提示（与 ⌘C 多选口径一致）；单选维持静默——剪贴板内容即确认
+        Button(L10n.t("拷贝文件") + countSuffix(targets)) {
+            ClipboardSupport.copyFiles(targets)
+            if targets.count > 1 {
+                store.postNotice(L10n.tf("已拷贝 %d 个文件", targets.count))
+            }
+        }
+        Button(L10n.t("拷贝路径") + countSuffix(targets)) {
+            copyPaths(targets)
+            if targets.count > 1 {
+                store.postNotice(L10n.tf("已拷贝 %d 条路径", targets.count))
+            }
+        }
         Button(L10n.t("移动到文件夹…") + countSuffix(targets)) { moveToFolder(targets) }
         if targets.contains(where: { !store.missingIDs.contains($0.id) }) {
             Button(L10n.t("移到废纸篓") + countSuffix(targets), role: .destructive) {
@@ -1278,7 +1334,7 @@ private struct ItemRow: View {
     /// 单击行：选中 + 把非激活面板设为 key，让键盘导航（空格/↑↓）可用
     private func selectRow() {
         DrawerPanel.active?.makeKeyAndOrderFront(nil)
-        withAnimation(.easeOut(duration: 0.15)) {
+        withAnimation(DrawerMotion.fade) {
             interaction.select(item)
         }
     }
@@ -1319,7 +1375,7 @@ private struct ItemRow: View {
             if let first = failures.first { NSAlert(error: first).runModal() }
             return
         }
-        withAnimation(.spring(response: 0.32, dampingFraction: 0.8)) {
+        withAnimation(DrawerMotion.listChange) {
             for entry in moved { store.updatePath(id: entry.id, to: entry.destination) }
         }
         if !failures.isEmpty {
@@ -1419,7 +1475,7 @@ private struct ItemRow: View {
     }
 
     private func removeTargets(_ targets: [ShelfItem]) {
-        withAnimation(.spring(response: 0.32, dampingFraction: 0.8)) {
+        withAnimation(DrawerMotion.listChange) {
             store.remove(targets)
         }
     }
@@ -1469,7 +1525,7 @@ private struct CollapsedTabView: View {
     var body: some View {
         Button {
             DrawerPanel.active?.makeKeyAndOrderFront(nil)
-            withAnimation(.spring(response: 0.42, dampingFraction: 0.9)) {
+            withAnimation(DrawerMotion.expand) {
                 interaction.isCollapsed = false
             }
         } label: {
@@ -1518,6 +1574,8 @@ private struct CollapsedTabView: View {
         .onChange(of: peekItemIDs) { loadPeekThumbs() }
         .help(L10n.t("展开抽屉"))
         .accessibilityLabel(L10n.t("展开抽屉"))
+        // 芯片 label 之外把条目数作为值播报（VO 读「展开抽屉，12 个条目，按钮」）
+        .accessibilityValue(L10n.tf("%d 个条目", store.currentItems.count))
     }
 
     /// 芯片内容：最新一张缩略瓷片 + 计数 + 状态灯，纵列居中
@@ -1532,12 +1590,33 @@ private struct CollapsedTabView: View {
                 .padding(.top, 8)
                 .contentTransition(.numericText())
                 .animation(DrawerMotion.bouncy, value: store.currentItems.count)
-            // 状态灯：品牌紫的小呼吸点，是芯片里唯一的彩色元素
-            Circle()
-                .fill(DrawerTheme.accent.opacity(hovered ? 1 : 0.85))
-                .frame(width: 5, height: 5)
+            // 状态灯：品牌紫的小呼吸点，是芯片里唯一的彩色元素——
+            // 2.5 秒一周期的轻幅呼吸（透明度 ±30% + 尺寸 ±12%）兑现「活性信号」；
+            // 「减少动态」时静默为恒亮点（不做连续动画）
+            statusDot
                 .padding(.top, 8)
                 .padding(.bottom, 12)
+        }
+    }
+
+    /// 呼吸状态灯：基准亮度随悬停点亮，呼吸在其上小幅起伏
+    @ViewBuilder
+    private var statusDot: some View {
+        let base = hovered ? 1.0 : 0.85
+        let dot = Circle()
+            .fill(DrawerTheme.accent)
+            .frame(width: 5, height: 5)
+        if DrawerMotion.reduceMotionEnabled {
+            dot.opacity(base)
+        } else {
+            dot
+                .phaseAnimator([false, true]) { content, dimmed in
+                    content
+                        .opacity(dimmed ? base * 0.7 : base)
+                        .scaleEffect(dimmed ? 0.88 : 1)
+                } animation: { _ in
+                    .easeInOut(duration: 1.25)
+                }
         }
     }
 
